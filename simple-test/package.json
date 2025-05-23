@@ -1,0 +1,9 @@
+{
+  "name": "simple-test",
+  "version": "1.0.0",
+  "description": "Simple test for claude_container",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  }
+}

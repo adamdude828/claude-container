@@ -1,0 +1,8 @@
+{
+  "env_vars": {},
+  "runtime_versions": [],
+  "custom_commands": [],
+  "base_image": "ubuntu:22.04",
+  "include_code": true,
+  "cached_image_tag": "claude-container-claude-test-project"
+}

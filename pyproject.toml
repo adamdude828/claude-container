@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "claude-container"
+version = "0.1.0"
+description = ""
+authors = ["Adam Holsinger <adamholsinger@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+click = "^8.2.1"
+docker = "^7.1.0"
+pyyaml = "^6.0.2"
+pydantic = "^2.0.0"
+
+[tool.poetry.scripts]
+claude-container = "claude_container.cli.main:cli"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

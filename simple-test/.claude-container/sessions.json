@@ -1,0 +1,42 @@
+[
+  {
+    "session_id": "fc6f01b5-5cd3-4b69-a7bf-97a87bf8dd40",
+    "name": "test-async",
+    "command": [
+      "claude --model=sonnet -p \"write a hello world in test.js\""
+    ],
+    "created_at": "2025-05-23T17:24:46.261265",
+    "status": "failed",
+    "container_id": null
+  },
+  {
+    "session_id": "e9c25f2a-1572-4c4b-8c6d-c3ca8905e5df",
+    "name": "test-async",
+    "command": [
+      "claude --model=sonnet -p \"write a hello world in test.js\""
+    ],
+    "created_at": "2025-05-23T17:25:14.115026",
+    "status": "failed",
+    "container_id": null
+  },
+  {
+    "session_id": "9d5ccfcd-4f93-46e6-8591-4fd0c50314ac",
+    "name": "test-async",
+    "command": [
+      "claude --model=sonnet -p \"write a hello world in test.js\""
+    ],
+    "created_at": "2025-05-23T17:25:40.040589",
+    "status": "running",
+    "container_id": "4d068cd973e980aabb5bb4b82d3cc6658f7c95f36e4729aa207869ee09050207"
+  },
+  {
+    "session_id": "f151ee96-8d85-40e3-98fb-2d127f1eb17c",
+    "name": "write-hello",
+    "command": [
+      "claude --model=sonnet -p \"write a hello world in test.js\""
+    ],
+    "created_at": "2025-05-23T17:32:03.132145",
+    "status": "running",
+    "container_id": "ac3a73c4e665ddeb6910588d8e69d7d4acf31d191c79aaacb2d17daeaa0a586b"
+  }
+]

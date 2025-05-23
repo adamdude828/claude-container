@@ -1,0 +1,13 @@
+name: test-app
+version: 1.0.0
+description: Test application for claude_container
+
+build:
+  dockerfile: Dockerfile
+  context: .
+
+runtime:
+  ports:
+    - "5000:5000"
+  environment:
+    - FLASK_ENV=development
