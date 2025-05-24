@@ -1,6 +1,18 @@
 # Claude Container
 
-Run Claude Code in isolated Docker environments with a universal development container.
+A command-line tool for running Claude Code in isolated Docker environments with a universal development container.
+
+## What is Claude Container?
+
+Claude Container is a CLI tool that helps developers use [Claude Code](https://www.anthropic.com/claude-code) within a consistent, isolated Docker environment. It provides a simple way to:
+
+1. Create Docker containers with Claude Code pre-installed
+2. Configure development environments with specific runtime versions
+3. Store environment variables and settings on a per-project basis
+4. Run Claude Code tasks in an isolated environment
+5. Execute commands within the container
+
+This eliminates the "works on my machine" problem and ensures a consistent development experience across team members while using Claude Code.
 
 ## Features
 
@@ -11,6 +23,8 @@ Run Claude Code in isolated Docker environments with a universal development con
 - **Project-Based Configuration**: Store environment variables and settings in `.claude-container`
 - **Runtime Version Management**: Configure specific versions of Python, Node.js, Go, etc.
 - **Custom Build Commands**: Add one-off commands to customize your container
+- **GitHub CLI Integration**: Automatically mounts GitHub CLI configuration for seamless GitHub operations
+- **Session Management**: Create and continue Claude Code sessions
 
 ## Installation
 
@@ -23,8 +37,13 @@ pip install claude-container
 ### Build a container for your project
 
 ```bash
+# Build with default settings
 claude-container build
-claude-container build --force-rebuild  # Bypass Docker cache
+
+# Force rebuild (bypasses Docker cache)
+claude-container build --force-rebuild
+
+# Specify a custom tag
 claude-container build --tag my-custom-tag
 ```
 
