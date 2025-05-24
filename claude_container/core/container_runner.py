@@ -1,5 +1,6 @@
 """Container running functionality."""
 
+import subprocess
 from pathlib import Path
 from typing import List, Optional, Dict
 
@@ -34,8 +35,12 @@ class ContainerRunner:
                     volumes=volumes,
                     working_dir=DEFAULT_WORKDIR,
                     tty=True,
-                    stdin_open=False,  # No stdin for -p commands
-                    remove=True
+                    stdin_open=True,  # Allow stdin for interactive commands
+                    remove=True,
+                    environment={
+                        'CLAUDE_CONFIG_DIR': '/home/node/.claude',
+                        'NODE_OPTIONS': '--max-old-space-size=4096'
+                    }
                 )
             else:
                 # For other commands, capture and print output
@@ -47,7 +52,11 @@ class ContainerRunner:
                     tty=False,
                     remove=True,
                     stdout=True,
-                    stderr=True
+                    stderr=True,
+                    environment={
+                        'CLAUDE_CONFIG_DIR': '/home/node/.claude',
+                        'NODE_OPTIONS': '--max-old-space-size=4096'
+                    }
                 )
                 print(result.decode('utf-8') if isinstance(result, bytes) else result)
         except Exception as e:
@@ -87,7 +96,9 @@ class ContainerRunner:
             detach=True,
             environment={
                 'CLAUDE_CODE_AVAILABLE': '1',
-                'CLAUDE_SESSION_ID': session_id
+                'CLAUDE_SESSION_ID': session_id,
+                'CLAUDE_CONFIG_DIR': '/home/node/.claude',
+                'NODE_OPTIONS': '--max-old-space-size=4096'
             }
         )
         
@@ -104,33 +115,62 @@ class ContainerRunner:
         }
         
         # Always mount Claude configuration (read-write so Claude can update trusted folders)
+        # Mount to node user's home directory instead of root
         claude_config = Path.home() / '.claude.json'
         if claude_config.exists():
-            volumes[str(claude_config)] = {'bind': '/root/.claude.json', 'mode': 'rw'}
+            volumes[str(claude_config)] = {'bind': '/home/node/.claude.json', 'mode': 'rw'}
         else:
             print("Warning: ~/.claude.json not found. Claude Code may not have access to your settings.")
         
         # Mount Claude directory if it exists
         claude_dir = Path.home() / '.claude'
         if claude_dir.exists():
-            volumes[str(claude_dir)] = {'bind': '/root/.claude', 'mode': 'rw'}
+            volumes[str(claude_dir)] = {'bind': '/home/node/.claude', 'mode': 'rw'}
         
-        # Mount SSH directory if it exists
+        # Mount SSH directory if it exists (for git operations)
         ssh_dir = Path.home() / '.ssh'
         if ssh_dir.exists():
-            volumes[str(ssh_dir)] = {'bind': '/root/.ssh', 'mode': 'ro'}
+            volumes[str(ssh_dir)] = {'bind': '/home/node/.ssh', 'mode': 'ro'}
         
         # Mount GitHub CLI config if it exists
         gh_config_dir = Path.home() / '.config' / 'gh'
         if gh_config_dir.exists():
-            volumes[str(gh_config_dir)] = {'bind': '/root/.config/gh', 'mode': 'ro'}
+            volumes[str(gh_config_dir)] = {'bind': '/home/node/.config/gh', 'mode': 'ro'}
+        
+        # Mount host's Claude Code installation
+        try:
+            result = subprocess.run(['npm', 'root', '-g'], 
+                                  capture_output=True, text=True, check=True)
+            node_modules = result.stdout.strip()
+            if node_modules and Path(node_modules).exists():
+                claude_code_path = Path(node_modules) / '@anthropic-ai' / 'claude-code'
+                if claude_code_path.exists():
+                    # Handle spaces in path with temporary symlink
+                    temp_link = Path('/tmp/claude-node-modules-link')
+                    temp_link.unlink(missing_ok=True)
+                    temp_link.symlink_to(node_modules)
+                    volumes[str(temp_link)] = {'bind': '/host-node-modules', 'mode': 'ro'}
+                else:
+                    print("Warning: Claude Code not found in global node_modules. Install with 'npm install -g @anthropic-ai/claude-code'")
+            else:
+                print("Warning: Global node_modules directory not found")
+        except subprocess.CalledProcessError:
+            print("Warning: npm not found or failed to get global modules path")
+        except Exception as e:
+            print(f"Warning: Failed to setup Claude Code mount: {e}")
         
         return volumes
     
     def run_async(self, command: List[str], session_id: str):
         """Run a command asynchronously in the background."""
         volumes = self._get_volumes()
-        cmd = ' '.join(command) if command else '/bin/bash'
+        
+        # Handle empty command - don't default to bash for async runs
+        if not command:
+            print("Error: No command provided for async run")
+            return None
+            
+        cmd = ' '.join(command)
         
         # Check if image exists locally
         try:
@@ -139,6 +179,9 @@ class ContainerRunner:
             print(f"Error: Image '{self.image_name}' not found. Please run 'build' first.")
             return None
         
+        # Determine if this is a long-running command (claude) vs short command
+        is_claude_command = command and command[0] == 'claude'
+        
         try:
             # Run container in detached mode
             container = self.docker_client.client.containers.run(
@@ -146,13 +189,15 @@ class ContainerRunner:
                 cmd,
                 volumes=volumes,
                 working_dir=DEFAULT_WORKDIR,
-                tty=True,
-                stdin_open=True,
+                tty=is_claude_command,  # Only use tty for interactive claude commands
+                stdin_open=is_claude_command,  # Only keep stdin open for claude commands
                 detach=True,
                 name=f"claude-async-{session_id[:8]}",  # Use shorter ID for container name
                 environment={
                     'CLAUDE_SESSION_ID': session_id,
-                    'CLAUDE_AUTO_APPROVE': 'true'  # Auto-approve permissions for async mode
+                    'CLAUDE_CONFIG_DIR': '/home/node/.claude',
+                    'CLAUDE_AUTO_APPROVE': 'true',  # Auto-approve permissions for async mode
+                    'NODE_OPTIONS': '--max-old-space-size=4096'
                 }
             )
             return container

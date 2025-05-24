@@ -38,5 +38,85 @@
     "created_at": "2025-05-23T17:32:03.132145",
     "status": "running",
     "container_id": "ac3a73c4e665ddeb6910588d8e69d7d4acf31d191c79aaacb2d17daeaa0a586b"
+  },
+  {
+    "session_id": "c0301214-8428-4b28-88a8-a3675262c620",
+    "name": "write-hello",
+    "command": [
+      "claude --model=sonnet -p \"write a hello world in test.js\""
+    ],
+    "created_at": "2025-05-23T18:52:08.977074",
+    "status": "running",
+    "container_id": "5807a14c04c541cdd29e88f15dae09ab8875b2d1cc528dc87b0350e1b42fd0fb"
+  },
+  {
+    "session_id": "39362978-b1e2-4644-9519-9d73830726b4",
+    "name": "hello-test",
+    "command": [
+      "claude --model sonnet -p \"say hello\""
+    ],
+    "created_at": "2025-05-23T18:55:27.157653",
+    "status": "running",
+    "container_id": "96925b396696ee5cf8e33c58c1e5daf4d762d2b7ffbfc3089995081bee43f9c6"
+  },
+  {
+    "session_id": "dc60c4b0-9c94-47eb-a818-393736ecf312",
+    "name": "hello-task",
+    "command": [
+      "claude --model sonnet -p \"say hello\""
+    ],
+    "created_at": "2025-05-23T19:08:06.047500",
+    "status": "pending",
+    "container_id": null
+  },
+  {
+    "session_id": "f0c3e761-68ca-4144-9e01-29a3c71e4113",
+    "name": "hello-task",
+    "command": [
+      "claude --model sonnet -p \"say hello\""
+    ],
+    "created_at": "2025-05-23T19:08:06.047500",
+    "status": "running",
+    "container_id": null
+  },
+  {
+    "session_id": "f429a077-eb88-4e42-b509-222c114d7b93",
+    "name": "hello-world",
+    "command": [
+      "claude --model sonnet -p \"write hello world to test.js\""
+    ],
+    "created_at": "2025-05-23T19:09:32.974315",
+    "status": "pending",
+    "container_id": null
+  },
+  {
+    "session_id": "a827b642-2502-4ef0-af0c-5a8c0e770c6b",
+    "name": "hello-world",
+    "command": [
+      "claude --model sonnet -p \"write hello world to test.js\""
+    ],
+    "created_at": "2025-05-23T19:09:32.974315",
+    "status": "running",
+    "container_id": null
+  },
+  {
+    "session_id": "ebccf835-5fff-41e6-88b0-f14ed7cea786",
+    "name": "test-error",
+    "command": [
+      "claude --model sonnet -p \"say hello\""
+    ],
+    "created_at": "2025-05-23T19:10:27.059685",
+    "status": "pending",
+    "container_id": null
+  },
+  {
+    "session_id": "b8195a75-8f1d-47d6-944f-7171774f4963",
+    "name": "test-error",
+    "command": [
+      "claude --model sonnet -p \"say hello\""
+    ],
+    "created_at": "2025-05-23T19:10:27.059685",
+    "status": "running",
+    "container_id": null
   }
 ]

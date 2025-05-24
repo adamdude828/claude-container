@@ -9,6 +9,7 @@ from .commands.start import start
 from .commands.sessions import sessions
 from .commands.clean import clean
 from .commands.config import config
+from .commands.daemon import daemon
 
 
 @click.group()
@@ -25,6 +26,7 @@ cli.add_command(start)
 cli.add_command(sessions)
 cli.add_command(clean)
 cli.add_command(config)
+cli.add_command(daemon)
 
 
 if __name__ == '__main__':

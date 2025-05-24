@@ -9,17 +9,31 @@ RUN node_version=$(node --version 2>/dev/null | cut -d'v' -f2 | cut -d'.' -f1) &
         exit 1; \\
     fi
 
-# Install Claude Code globally with retry and verbose logging
-RUN npm config set registry https://registry.npmjs.org/ && \
-    npm install -g @anthropic-ai/claude-code --verbose || \
-    (echo "Failed to install Claude Code. Retrying..." && \
-     npm cache clean --force && \
-     npm install -g @anthropic-ai/claude-code --verbose)
+# Ensure the node user exists (should exist in node:20 images)
+RUN id -u node &>/dev/null || useradd -m -s /bin/bash node
 
-# Create .claude directory for configuration
-RUN mkdir -p /root/.claude
+# Create directories with proper ownership
+RUN mkdir -p /home/node/.claude /workspace && \\
+    chown -R node:node /home/node/.claude /workspace
 
-# Install additional Node.js package managers (yarn already in node:20)
+# Create entrypoint script to setup Claude Code from host mount (as root)
+RUN echo '#!/bin/bash' > /entrypoint.sh && \\
+    echo 'if [ -d "/host-node-modules/@anthropic-ai/claude-code" ]; then' >> /entrypoint.sh && \\
+    echo '    mkdir -p /home/node/.local/bin' >> /entrypoint.sh && \\
+    echo '    ln -sf /host-node-modules/@anthropic-ai/claude-code/cli.js /home/node/.local/bin/claude' >> /entrypoint.sh && \\
+    echo '    export PATH="/home/node/.local/bin:$PATH"' >> /entrypoint.sh && \\
+    echo 'fi' >> /entrypoint.sh && \\
+    echo 'exec "$@"' >> /entrypoint.sh && \\
+    chmod +x /entrypoint.sh
+
+# Switch to node user for npm installs
+USER node
+
+# Set npm prefix for global installs as node user
+ENV NPM_CONFIG_PREFIX=/home/node/.npm-global
+ENV PATH=$PATH:/home/node/.npm-global/bin
+
+# Install additional Node.js package managers
 RUN npm install -g pnpm || true
 
 {runtime_overrides}
@@ -28,8 +42,14 @@ RUN npm install -g pnpm || true
 
 {custom_commands}
 
+# Switch to node user
+USER node
+
 # Set working directory
 WORKDIR /workspace
+
+# Use entrypoint to setup Claude Code and run commands
+ENTRYPOINT ["/entrypoint.sh"]
 
 # Default command
 CMD ["claude"]
@@ -68,21 +88,36 @@ RUN node_version=$(node --version | cut -d'v' -f2 | cut -d'.' -f1) && \\
         exit 1; \\
     fi
 
-# Install Claude Code globally with retry and verbose logging
-RUN npm config set registry https://registry.npmjs.org/ && \
-    npm install -g @anthropic-ai/claude-code --verbose || \
-    (echo "Failed to install Claude Code. Retrying..." && \
-     npm cache clean --force && \
-     npm install -g @anthropic-ai/claude-code --verbose)
+# Create node user and directories
+RUN useradd -m -s /bin/bash node && \
+    mkdir -p /home/node/.claude /workspace && \
+    chown -R node:node /home/node/.claude /workspace
 
-# Create .claude directory for configuration
-RUN mkdir -p /root/.claude
+# Create entrypoint script to setup Claude Code from host mount (as root)
+RUN echo '#!/bin/bash' > /entrypoint.sh && \\
+    echo 'if [ -d "/host-node-modules/@anthropic-ai/claude-code" ]; then' >> /entrypoint.sh && \\
+    echo '    mkdir -p /home/node/.local/bin' >> /entrypoint.sh && \\
+    echo '    ln -sf /host-node-modules/@anthropic-ai/claude-code/cli.js /home/node/.local/bin/claude' >> /entrypoint.sh && \\
+    echo '    export PATH="/home/node/.local/bin:$PATH"' >> /entrypoint.sh && \\
+    echo 'fi' >> /entrypoint.sh && \\
+    echo 'exec "$@"' >> /entrypoint.sh && \\
+    chmod +x /entrypoint.sh
+
+# Switch to node user for npm installs
+USER node
+
+# Set npm prefix for global installs as node user
+ENV NPM_CONFIG_PREFIX=/home/node/.npm-global
+ENV PATH=$PATH:/home/node/.npm-global/bin
 
 # Install additional Node.js package managers
 RUN npm install -g yarn pnpm
 
+# Switch back to root for system installations
+USER root
+
 # Install Python versions with pyenv
-ENV PYENV_ROOT="/root/.pyenv"
+ENV PYENV_ROOT="/home/node/.pyenv"
 ENV PATH="$PYENV_ROOT/bin:$PATH"
 RUN curl https://pyenv.run | bash && \\
     eval "$(pyenv init -)" && \\
@@ -90,8 +125,8 @@ RUN curl https://pyenv.run | bash && \\
     pyenv global 3.11.10
 
 # Install Rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:$PATH"
+RUN su - node -c "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y"
+ENV PATH="/home/node/.cargo/bin:$PATH"
 
 # Install Go
 RUN wget -O go.tar.gz https://go.dev/dl/go1.23.8.linux-amd64.tar.gz && \\
@@ -117,8 +152,14 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
 
 {custom_commands}
 
+# Switch to node user
+USER node
+
 # Set working directory
 WORKDIR /workspace
+
+# Use entrypoint to setup Claude Code and run commands
+ENTRYPOINT ["/entrypoint.sh"]
 
 # Default command
 CMD ["claude"]
@@ -141,15 +182,27 @@ RUN node_version=$(node --version | cut -d'v' -f2 | cut -d'.' -f1) && \\
         exit 1; \\
     fi
 
-# Install Claude Code globally with retry and verbose logging
-RUN npm config set registry https://registry.npmjs.org/ && \
-    npm install -g @anthropic-ai/claude-code --verbose || \
-    (echo "Failed to install Claude Code. Retrying..." && \
-     npm cache clean --force && \
-     npm install -g @anthropic-ai/claude-code --verbose)
+# Create node user if it doesn't exist and set up directories
+RUN (id -u node &>/dev/null || adduser --disabled-password --gecos '' node) && \
+    mkdir -p /home/node/.claude /workspace && \
+    chown -R node:node /home/node/.claude /workspace
 
-# Create .claude directory for configuration
-RUN mkdir -p /root/.claude
+# Create entrypoint script to setup Claude Code from host mount (as root)
+RUN echo '#!/bin/bash' > /entrypoint.sh && \\
+    echo 'if [ -d "/host-node-modules/@anthropic-ai/claude-code" ]; then' >> /entrypoint.sh && \\
+    echo '    mkdir -p /home/node/.local/bin' >> /entrypoint.sh && \\
+    echo '    ln -sf /host-node-modules/@anthropic-ai/claude-code/cli.js /home/node/.local/bin/claude' >> /entrypoint.sh && \\
+    echo '    export PATH="/home/node/.local/bin:$PATH"' >> /entrypoint.sh && \\
+    echo 'fi' >> /entrypoint.sh && \\
+    echo 'exec "$@"' >> /entrypoint.sh && \\
+    chmod +x /entrypoint.sh
+
+# Switch to node user
+USER node
+
+# Set npm prefix for global installs as node user
+ENV NPM_CONFIG_PREFIX=/home/node/.npm-global
+ENV PATH=$PATH:/home/node/.npm-global/bin
 
 {runtime_overrides}
 
@@ -157,8 +210,14 @@ RUN mkdir -p /root/.claude
 
 {custom_commands}
 
+# Switch to node user
+USER node
+
 # Set working directory
 WORKDIR /workspace
+
+# Use entrypoint to setup Claude Code and run commands
+ENTRYPOINT ["/entrypoint.sh"]
 
 # Default command
 CMD ["claude"]

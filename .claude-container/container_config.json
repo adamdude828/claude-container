@@ -4,5 +4,5 @@
   "custom_commands": [],
   "base_image": "node:20",
   "include_code": true,
-  "cached_image_tag": "claude-container-claude-local"
+  "cached_image_tag": "test-claude-mount"
 }

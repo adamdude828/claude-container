@@ -33,6 +33,25 @@ def list():
         click.echo("No sessions found")
         return
     
+    # Update session statuses based on actual container states
+    docker_client = None
+    for session in session_list:
+        if session.container_id and session.status == "running":
+            try:
+                if not docker_client:
+                    docker_client = DockerClient()
+                container = docker_client.client.containers.get(session.container_id)
+                
+                # If container has exited, update session status
+                if container.status == "exited":
+                    exit_code = container.attrs.get('State', {}).get('ExitCode', 1)
+                    session.status = "completed" if exit_code == 0 else "failed"
+                    session_manager.save_session(session)
+            except:
+                # Container not found, mark as failed
+                session.status = "failed"
+                session_manager.save_session(session)
+    
     click.echo("Sessions:")
     click.echo(f"{'Status':<10} {'Name':<20} {'Command':<40} {'Created':<20}")
     click.echo("-" * 90)
@@ -69,6 +88,23 @@ def status(session_name):
     if not session:
         click.echo(f"Session '{session_name}' not found")
         return
+    
+    # Update session status based on actual container state
+    if session.container_id and session.status == "running":
+        try:
+            docker_client = DockerClient()
+            container = docker_client.client.containers.get(session.container_id)
+            
+            # If container has exited, update session status
+            if container.status == "exited":
+                # Check exit code to determine if it was successful or failed
+                exit_code = container.attrs.get('State', {}).get('ExitCode', 1)
+                session.status = "completed" if exit_code == 0 else "failed"
+                session_manager.save_session(session)
+        except:
+            # Container not found, mark as failed
+            session.status = "failed"
+            session_manager.save_session(session)
     
     click.echo(f"Session: {session.name}")
     click.echo(f"ID: {session.session_id}")
