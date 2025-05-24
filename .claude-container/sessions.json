@@ -8,5 +8,50 @@
     "created_at": "2025-05-24T13:33:56.406911",
     "status": "completed",
     "container_id": "6e731f54e251ab9f87ac830401335944cb6a1ffe9f37d2452f555f49919cae56"
+  },
+  {
+    "session_id": "9e9ea26b-3b3a-485d-9a51-b0b8e0810054",
+    "name": "git-test-session",
+    "command": [
+      "/bin/bash",
+      "/home/node/claude_container/test_git_communication.sh"
+    ],
+    "created_at": "2025-05-24T13:53:39.178820",
+    "status": "running",
+    "container_id": "62dc78686f08668b3f5ce1fab9bc108abb7366d38e1028a95eae9c430c434752"
+  },
+  {
+    "session_id": "b1a50de7-3a85-4c48-8b1e-cb9b078e39ce",
+    "name": "git-test-ls",
+    "command": [
+      "ls",
+      "-la",
+      "/workspace/claude_container/"
+    ],
+    "created_at": "2025-05-24T13:53:55.514178",
+    "status": "running",
+    "container_id": "eb2e9eb273a8fa0223162afe7ea5aeb2259fc5d857e97e730afd0e6b819a3c7d"
+  },
+  {
+    "session_id": "a1637499-8677-4a38-9a20-0f57e716403d",
+    "name": "git-test-run",
+    "command": [
+      "/bin/bash",
+      "/workspace/claude_container/test_git_communication.sh"
+    ],
+    "created_at": "2025-05-24T13:54:07.977874",
+    "status": "running",
+    "container_id": "5bdb7c05a1644a70742d15930653e4131cdb6a2666fc144e3f49d6d5995e5d73"
+  },
+  {
+    "session_id": "aaf6124e-43b1-4f9f-8f51-3ff632a38330",
+    "name": "git-test-final",
+    "command": [
+      "/bin/bash",
+      "/workspace/claude_container/test_git_communication.sh"
+    ],
+    "created_at": "2025-05-24T13:55:47.337473",
+    "status": "running",
+    "container_id": "e9b8d7f803030368d58de10e0cddfb1b367f02a95cedf28357a896c85a8a0f5b"
   }
 ]

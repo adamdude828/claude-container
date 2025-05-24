@@ -149,6 +149,11 @@ class ContainerRunner:
         if gh_config_dir.exists():
             volumes[str(gh_config_dir)] = {'bind': '/home/node/.config/gh', 'mode': 'ro'}
         
+        # Mount git config if it exists
+        gitconfig = Path.home() / '.gitconfig'
+        if gitconfig.exists():
+            volumes[str(gitconfig)] = {'bind': '/home/node/.gitconfig', 'mode': 'ro'}
+        
         # Mount host's npm global directory (includes Claude binary)
         try:
             result = subprocess.run(['npm', 'config', 'get', 'prefix'], 
