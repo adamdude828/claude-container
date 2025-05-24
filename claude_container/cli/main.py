@@ -10,6 +10,7 @@ from .commands.daemon import daemon
 from .commands.queue import queue
 from .commands.login import login
 from .commands.auth_check import auth_check
+from .commands.task import task
 
 
 @click.group()
@@ -27,6 +28,7 @@ cli.add_command(daemon)
 cli.add_command(queue)
 cli.add_command(login)
 cli.add_command(auth_check)
+cli.add_command(task)
 
 
 if __name__ == '__main__':
