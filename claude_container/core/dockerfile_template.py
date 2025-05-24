@@ -16,13 +16,19 @@ RUN id -u node &>/dev/null || useradd -m -s /bin/bash node
 RUN mkdir -p /home/node/.claude /workspace && \\
     chown -R node:node /home/node/.claude /workspace
 
-# Create entrypoint script to setup Claude Code from host mount (as root)
+# Create Claude wrapper script that will be available to all users
+RUN if [ -f /usr/local/bin/claude ]; then rm /usr/local/bin/claude; fi && \\
+    echo '#!/bin/bash' > /usr/local/bin/claude && \\
+    echo 'if [ -f "/host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js" ]; then' >> /usr/local/bin/claude && \\
+    echo '    exec node /host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js "$@"' >> /usr/local/bin/claude && \\
+    echo 'else' >> /usr/local/bin/claude && \\
+    echo '    echo "Error: Claude Code not found in mounted npm global directory"' >> /usr/local/bin/claude && \\
+    echo '    exit 1' >> /usr/local/bin/claude && \\
+    echo 'fi' >> /usr/local/bin/claude && \\
+    chmod +x /usr/local/bin/claude
+
+# Create simple entrypoint
 RUN echo '#!/bin/bash' > /entrypoint.sh && \\
-    echo 'if [ -d "/host-node-modules/@anthropic-ai/claude-code" ]; then' >> /entrypoint.sh && \\
-    echo '    mkdir -p /home/node/.local/bin' >> /entrypoint.sh && \\
-    echo '    ln -sf /host-node-modules/@anthropic-ai/claude-code/cli.js /home/node/.local/bin/claude' >> /entrypoint.sh && \\
-    echo '    export PATH="/home/node/.local/bin:$PATH"' >> /entrypoint.sh && \\
-    echo 'fi' >> /entrypoint.sh && \\
     echo 'exec "$@"' >> /entrypoint.sh && \\
     chmod +x /entrypoint.sh
 
@@ -93,13 +99,19 @@ RUN useradd -m -s /bin/bash node && \
     mkdir -p /home/node/.claude /workspace && \
     chown -R node:node /home/node/.claude /workspace
 
-# Create entrypoint script to setup Claude Code from host mount (as root)
+# Create Claude wrapper script that will be available to all users
+RUN if [ -f /usr/local/bin/claude ]; then rm /usr/local/bin/claude; fi && \\
+    echo '#!/bin/bash' > /usr/local/bin/claude && \\
+    echo 'if [ -f "/host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js" ]; then' >> /usr/local/bin/claude && \\
+    echo '    exec node /host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js "$@"' >> /usr/local/bin/claude && \\
+    echo 'else' >> /usr/local/bin/claude && \\
+    echo '    echo "Error: Claude Code not found in mounted npm global directory"' >> /usr/local/bin/claude && \\
+    echo '    exit 1' >> /usr/local/bin/claude && \\
+    echo 'fi' >> /usr/local/bin/claude && \\
+    chmod +x /usr/local/bin/claude
+
+# Create simple entrypoint
 RUN echo '#!/bin/bash' > /entrypoint.sh && \\
-    echo 'if [ -d "/host-node-modules/@anthropic-ai/claude-code" ]; then' >> /entrypoint.sh && \\
-    echo '    mkdir -p /home/node/.local/bin' >> /entrypoint.sh && \\
-    echo '    ln -sf /host-node-modules/@anthropic-ai/claude-code/cli.js /home/node/.local/bin/claude' >> /entrypoint.sh && \\
-    echo '    export PATH="/home/node/.local/bin:$PATH"' >> /entrypoint.sh && \\
-    echo 'fi' >> /entrypoint.sh && \\
     echo 'exec "$@"' >> /entrypoint.sh && \\
     chmod +x /entrypoint.sh
 
@@ -187,13 +199,19 @@ RUN (id -u node &>/dev/null || adduser --disabled-password --gecos '' node) && \
     mkdir -p /home/node/.claude /workspace && \
     chown -R node:node /home/node/.claude /workspace
 
-# Create entrypoint script to setup Claude Code from host mount (as root)
+# Create Claude wrapper script that will be available to all users
+RUN if [ -f /usr/local/bin/claude ]; then rm /usr/local/bin/claude; fi && \\
+    echo '#!/bin/bash' > /usr/local/bin/claude && \\
+    echo 'if [ -f "/host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js" ]; then' >> /usr/local/bin/claude && \\
+    echo '    exec node /host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js "$@"' >> /usr/local/bin/claude && \\
+    echo 'else' >> /usr/local/bin/claude && \\
+    echo '    echo "Error: Claude Code not found in mounted npm global directory"' >> /usr/local/bin/claude && \\
+    echo '    exit 1' >> /usr/local/bin/claude && \\
+    echo 'fi' >> /usr/local/bin/claude && \\
+    chmod +x /usr/local/bin/claude
+
+# Create simple entrypoint
 RUN echo '#!/bin/bash' > /entrypoint.sh && \\
-    echo 'if [ -d "/host-node-modules/@anthropic-ai/claude-code" ]; then' >> /entrypoint.sh && \\
-    echo '    mkdir -p /home/node/.local/bin' >> /entrypoint.sh && \\
-    echo '    ln -sf /host-node-modules/@anthropic-ai/claude-code/cli.js /home/node/.local/bin/claude' >> /entrypoint.sh && \\
-    echo '    export PATH="/home/node/.local/bin:$PATH"' >> /entrypoint.sh && \\
-    echo 'fi' >> /entrypoint.sh && \\
     echo 'exec "$@"' >> /entrypoint.sh && \\
     chmod +x /entrypoint.sh
 

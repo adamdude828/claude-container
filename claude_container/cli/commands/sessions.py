@@ -33,28 +33,45 @@ def list():
         click.echo("No sessions found")
         return
     
-    # Update session statuses based on actual container states
+    # Update session statuses based on actual container states and get container info
     docker_client = None
+    container_info = {}
+    
     for session in session_list:
-        if session.container_id and session.status == "running":
+        if session.container_id:
             try:
                 if not docker_client:
                     docker_client = DockerClient()
                 container = docker_client.client.containers.get(session.container_id)
                 
-                # If container has exited, update session status
-                if container.status == "exited":
+                # Store container info
+                container_info[session.session_id] = {
+                    'name': container.name,
+                    'status': container.status,
+                    'exists': True
+                }
+                
+                # If container has exited and session thinks it's running, update session status
+                if session.status == "running" and container.status == "exited":
                     exit_code = container.attrs.get('State', {}).get('ExitCode', 1)
                     session.status = "completed" if exit_code == 0 else "failed"
                     session_manager.save_session(session)
             except:
-                # Container not found, mark as failed
-                session.status = "failed"
-                session_manager.save_session(session)
+                # Container not found
+                container_info[session.session_id] = {
+                    'name': session.container_id[:12] if session.container_id else 'N/A',
+                    'status': 'not found',
+                    'exists': False
+                }
+                
+                # If session thinks it's running but container doesn't exist, mark as failed
+                if session.status == "running":
+                    session.status = "failed"
+                    session_manager.save_session(session)
     
     click.echo("Sessions:")
-    click.echo(f"{'Status':<10} {'Name':<20} {'Command':<40} {'Created':<20}")
-    click.echo("-" * 90)
+    click.echo(f"{'  Status':<15} {'Name':<20} {'Container':<25} {'Live Status':<12} {'Command':<30} {'Created':<20}")
+    click.echo("-" * 142)
     
     for session in session_list:
         status_icon = {
@@ -65,10 +82,15 @@ def list():
             "stopped": "⏹️"
         }.get(session.status, "❓")
         
-        cmd_str = ' '.join(session.command)[:37] + "..." if len(' '.join(session.command)) > 40 else ' '.join(session.command)
+        # Get container info for this session
+        cont_info = container_info.get(session.session_id, {})
+        container_name = cont_info.get('name', 'N/A')[:22] + "..." if len(cont_info.get('name', 'N/A')) > 25 else cont_info.get('name', 'N/A')
+        live_status = cont_info.get('status', 'N/A') if cont_info.get('exists', False) else 'not found'
+        
+        cmd_str = ' '.join(session.command)[:27] + "..." if len(' '.join(session.command)) > 30 else ' '.join(session.command)
         created = session.created_at.strftime('%Y-%m-%d %H:%M:%S')
         
-        click.echo(f"{status_icon} {session.status:<8} {session.name:<20} {cmd_str:<40} {created}")
+        click.echo(f"{status_icon} {session.status:<11} {session.name:<20} {container_name:<25} {live_status:<12} {cmd_str:<30} {created}")
 
 
 @sessions.command()

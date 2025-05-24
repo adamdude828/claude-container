@@ -1,17 +1,13 @@
 """Daemon command for Claude Container."""
 
 import click
-import json
 import subprocess
 import sys
 import os
 import signal
 from pathlib import Path
 
-from ...core.docker_client import DockerClient
 from ...core.daemon_client import DaemonClient
-from ...core.constants import DATA_DIR_NAME, CONTAINER_PREFIX
-from ...utils.session_manager import SessionManager
 
 
 @click.group()
@@ -110,89 +106,3 @@ def status():
         click.echo(f"Error checking status: {e}", err=True)
 
 
-@daemon.command()
-@click.argument('command', nargs=-1, type=click.UNPROCESSED)
-@click.option('--name', help='Name for this task')
-def submit(command, name):
-    """Submit a task to the daemon"""
-    if not command:
-        click.echo("No command provided")
-        return
-    
-    # Get project info
-    project_root = Path.cwd()
-    
-    client = DaemonClient()
-    response = client.submit_task(list(command), str(project_root))
-    
-    if "error" in response:
-        click.echo(f"Error: {response['error']}", err=True)
-        return
-    
-    task_id = response.get("task_id")
-    click.echo(f"Task submitted: {task_id}")
-    click.echo(f"Status: {response.get('status')}")
-    
-    # Save task info
-    project_root = Path.cwd()
-    data_dir = project_root / DATA_DIR_NAME
-    if data_dir.exists():
-        session_manager = SessionManager(data_dir)
-        session = session_manager.create_session(
-            name or f"task_{task_id[:8]}", 
-            list(command)
-        )
-        session.session_id = task_id
-        session.status = "running"
-        session_manager.save_session(session)
-
-
-@daemon.command()
-@click.argument('task_id')
-def logs(task_id):
-    """Get logs from a task"""
-    client = DaemonClient()
-    response = client.get_output(task_id)
-    
-    if "error" in response and isinstance(response.get("error"), str) and response["error"] and "task_id" not in response:
-        # This is an API error (not task error output)
-        click.echo(f"Error: {response['error']}", err=True)
-        return
-    
-    output = response.get("output", "")
-    error_output = response.get("error", "")
-    
-    if output:
-        click.echo("=== OUTPUT ===")
-        click.echo(output)
-    
-    if error_output:
-        click.echo("\n=== ERROR ===")
-        click.echo(error_output)
-    
-    if not output and not error_output:
-        click.echo("No output yet")
-
-
-@daemon.command()
-def tasks():
-    """List all tasks"""
-    client = DaemonClient()
-    response = client.list_tasks()
-    
-    if "error" in response:
-        click.echo(f"Error: {response['error']}", err=True)
-        return
-    
-    tasks = response.get("tasks", [])
-    if not tasks:
-        click.echo("No tasks")
-        return
-    
-    click.echo(f"{'Task ID':<40} {'Status':<10} {'Command'}")
-    click.echo("-" * 80)
-    for task in tasks:
-        task_id = task['task_id'][:8] + "..."
-        status = task['status']
-        command = task['command'][:40] + "..." if len(task['command']) > 40 else task['command']
-        click.echo(f"{task_id:<40} {status:<10} {command}")

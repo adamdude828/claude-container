@@ -1,122 +1,72 @@
 [
   {
-    "session_id": "fc6f01b5-5cd3-4b69-a7bf-97a87bf8dd40",
-    "name": "test-async",
+    "session_id": "51b10dfa-a964-45c1-afe6-cc3e1fdb4bae",
+    "name": "test-node-user",
     "command": [
-      "claude --model=sonnet -p \"write a hello world in test.js\""
+      "whoami"
     ],
-    "created_at": "2025-05-23T17:24:46.261265",
-    "status": "failed",
-    "container_id": null
-  },
-  {
-    "session_id": "e9c25f2a-1572-4c4b-8c6d-c3ca8905e5df",
-    "name": "test-async",
-    "command": [
-      "claude --model=sonnet -p \"write a hello world in test.js\""
-    ],
-    "created_at": "2025-05-23T17:25:14.115026",
-    "status": "failed",
-    "container_id": null
-  },
-  {
-    "session_id": "9d5ccfcd-4f93-46e6-8591-4fd0c50314ac",
-    "name": "test-async",
-    "command": [
-      "claude --model=sonnet -p \"write a hello world in test.js\""
-    ],
-    "created_at": "2025-05-23T17:25:40.040589",
+    "created_at": "2025-05-24T07:22:10.085341",
     "status": "running",
-    "container_id": "4d068cd973e980aabb5bb4b82d3cc6658f7c95f36e4729aa207869ee09050207"
+    "container_id": "5eca87dfc4c178ee26be987bfe134a6c53d5df203163c686370b295a66cda39f"
   },
   {
-    "session_id": "f151ee96-8d85-40e3-98fb-2d127f1eb17c",
-    "name": "write-hello",
+    "session_id": "841934fd-b0a0-47d1-95b4-c78fc56e778f",
+    "name": "test-claude-final",
     "command": [
-      "claude --model=sonnet -p \"write a hello world in test.js\""
+      "claude",
+      "--print",
+      "What is 2+2?"
     ],
-    "created_at": "2025-05-23T17:32:03.132145",
+    "created_at": "2025-05-24T07:22:22.891236",
     "status": "running",
-    "container_id": "ac3a73c4e665ddeb6910588d8e69d7d4acf31d191c79aaacb2d17daeaa0a586b"
+    "container_id": "643db1de95c6097f661e2abf058eefc5aeb1ed35d5d35d8ef18b1a58e900844e"
   },
   {
-    "session_id": "c0301214-8428-4b28-88a8-a3675262c620",
-    "name": "write-hello",
+    "session_id": "18d24afe-272e-446d-a20f-115050abb93b",
+    "name": "final-test",
     "command": [
-      "claude --model=sonnet -p \"write a hello world in test.js\""
+      "claude",
+      "--print",
+      "What is 2+2?"
     ],
-    "created_at": "2025-05-23T18:52:08.977074",
+    "created_at": "2025-05-24T07:25:54.212403",
     "status": "running",
-    "container_id": "5807a14c04c541cdd29e88f15dae09ab8875b2d1cc528dc87b0350e1b42fd0fb"
+    "container_id": "f7361cfc036cb5c6541cacf39eeb5be8d5d341b5469ef9caa789dffa1619b93b"
   },
   {
-    "session_id": "39362978-b1e2-4644-9519-9d73830726b4",
-    "name": "hello-test",
+    "session_id": "7b6508cf-e4c4-4536-b7a7-2e6415c89940",
+    "name": "debug-config2",
     "command": [
-      "claude --model sonnet -p \"say hello\""
+      "bash",
+      "-c",
+      "ls -la /home/node/.claude* 2>&1"
     ],
-    "created_at": "2025-05-23T18:55:27.157653",
+    "created_at": "2025-05-24T07:28:02.752171",
     "status": "running",
-    "container_id": "96925b396696ee5cf8e33c58c1e5daf4d762d2b7ffbfc3089995081bee43f9c6"
+    "container_id": "4e5b6f94c8fef8fade31e815c2a968157d9ed616ffd2c344bb6cd13adae3f8dd"
   },
   {
-    "session_id": "dc60c4b0-9c94-47eb-a818-393736ecf312",
-    "name": "hello-task",
+    "session_id": "b570c708-067c-4255-ac20-25911ed61070",
+    "name": "test-write",
     "command": [
-      "claude --model sonnet -p \"say hello\""
+      "bash",
+      "-c",
+      "touch /home/node/.claude.json.test 2>&1"
     ],
-    "created_at": "2025-05-23T19:08:06.047500",
-    "status": "pending",
-    "container_id": null
-  },
-  {
-    "session_id": "f0c3e761-68ca-4144-9e01-29a3c71e4113",
-    "name": "hello-task",
-    "command": [
-      "claude --model sonnet -p \"say hello\""
-    ],
-    "created_at": "2025-05-23T19:08:06.047500",
+    "created_at": "2025-05-24T07:39:25.043022",
     "status": "running",
-    "container_id": null
+    "container_id": "07337464ba271f43b381c508f873e0169bd1486d6fdf74146b7c8ac75e8db192"
   },
   {
-    "session_id": "f429a077-eb88-4e42-b509-222c114d7b93",
-    "name": "hello-world",
+    "session_id": "1e9eb4c3-1bc7-484e-8156-01227325797e",
+    "name": "test-auth",
     "command": [
-      "claude --model sonnet -p \"write hello world to test.js\""
+      "/bin/bash",
+      "-c",
+      "claude /login"
     ],
-    "created_at": "2025-05-23T19:09:32.974315",
-    "status": "pending",
-    "container_id": null
-  },
-  {
-    "session_id": "a827b642-2502-4ef0-af0c-5a8c0e770c6b",
-    "name": "hello-world",
-    "command": [
-      "claude --model sonnet -p \"write hello world to test.js\""
-    ],
-    "created_at": "2025-05-23T19:09:32.974315",
+    "created_at": "2025-05-24T07:40:20.125280",
     "status": "running",
-    "container_id": null
-  },
-  {
-    "session_id": "ebccf835-5fff-41e6-88b0-f14ed7cea786",
-    "name": "test-error",
-    "command": [
-      "claude --model sonnet -p \"say hello\""
-    ],
-    "created_at": "2025-05-23T19:10:27.059685",
-    "status": "pending",
-    "container_id": null
-  },
-  {
-    "session_id": "b8195a75-8f1d-47d6-944f-7171774f4963",
-    "name": "test-error",
-    "command": [
-      "claude --model sonnet -p \"say hello\""
-    ],
-    "created_at": "2025-05-23T19:10:27.059685",
-    "status": "running",
-    "container_id": null
+    "container_id": "833362cbfaaaadfc245749960a083a65105abc16ffb58c61f3b11b717e6aac4c"
   }
 ]

@@ -1,108 +1,12 @@
 [
   {
-    "session_id": "032538a4-301c-40cf-a0b6-6811d88c3bbd",
-    "name": "session_20250523_200458",
+    "session_id": "9913b0bd-f224-45de-b025-042b4c6b4a70",
+    "name": "session_20250524_133356",
     "command": [
-      "claude code --model=opus -p hello"
+      "claude -p 'hello' --model=opus"
     ],
-    "created_at": "2025-05-23T20:04:58.331786",
-    "status": "failed",
-    "container_id": "6543b8338dd83b7824cb799adc2818418e8c3ed18a052d21d0c7031a6d297bbd"
-  },
-  {
-    "session_id": "a2c538d9-8545-4b8e-98bc-a8b6d3f00b60",
-    "name": "session_20250523_200554",
-    "command": [
-      "claude code --model=opus -p hello"
-    ],
-    "created_at": "2025-05-23T20:05:54.343904",
-    "status": "failed",
-    "container_id": "482d879a54a6f5b6edd9a110241e76a00a8ae6fe58e93c1bc25ad596899bf812"
-  },
-  {
-    "session_id": "8a852441-e241-41ec-96a7-0431b61f7a09",
-    "name": "session_20250523_210632",
-    "command": [],
-    "created_at": "2025-05-23T21:06:32.714954",
-    "status": "running",
-    "container_id": "f254167cdcc1cb0fbd185157d8235ce35acece23511f441dad5f6999ded4f3b4"
-  },
-  {
-    "session_id": "890f6942-b38a-4965-bdd1-9a01df11627e",
-    "name": "session_20250523_210950",
-    "command": [
-      "ls -la"
-    ],
-    "created_at": "2025-05-23T21:09:50.014047",
+    "created_at": "2025-05-24T13:33:56.406911",
     "status": "completed",
-    "container_id": "87bc884e914e741f671b949891d43a58098d09773e1223646c6631744798ca0a"
-  },
-  {
-    "session_id": "12ad047a-4ee1-4748-b4b1-3161b6b441e3",
-    "name": "session_20250523_211125",
-    "command": [],
-    "created_at": "2025-05-23T21:11:25.527856",
-    "status": "failed",
-    "container_id": null
-  },
-  {
-    "session_id": "dd91cd78-f927-4ddf-8d4b-1fb824580e55",
-    "name": "session_20250523_211134",
-    "command": [
-      "ls -la"
-    ],
-    "created_at": "2025-05-23T21:11:34.554671",
-    "status": "completed",
-    "container_id": "8140a4fd009efebb94048418e32eb75fa97e78c049337b1a969ad9fe5dfc0585"
-  },
-  {
-    "session_id": "9ce93ff1-f083-4297-b96e-02e0c11f49a6",
-    "name": "session_20250523_211149",
-    "command": [
-      "claude -p 'Hello async test' --model=opus"
-    ],
-    "created_at": "2025-05-23T21:11:49.238718",
-    "status": "stopped",
-    "container_id": "d7cf29a0e0856b4eff1297b010badc9ae33433fd3ac1809e28c91127247e1234"
-  },
-  {
-    "session_id": "f2cf65aa-2388-4515-b4b6-07f142347d91",
-    "name": "session_20250523_211208",
-    "command": [
-      "echo 'test' && sleep 2 && echo 'done'"
-    ],
-    "created_at": "2025-05-23T21:12:08.082037",
-    "status": "completed",
-    "container_id": "98c47d22dd305e230f97603d5b0d476c0bfa664124fb8dff715241f9b5422cee"
-  },
-  {
-    "session_id": "bb24d77b-1c06-4594-94b2-cc9abcb9122a",
-    "name": "session_20250523_211251",
-    "command": [
-      "ls -la"
-    ],
-    "created_at": "2025-05-23T21:12:51.880938",
-    "status": "completed",
-    "container_id": "1e6d1307539a0cfad34ebe4df39b4b4b3d0d7f5f1218b9a12093a7618e60c7eb"
-  },
-  {
-    "session_id": "83ebcebc-f4ce-4dcf-9075-b63467912059",
-    "name": "session_20250523_211440",
-    "command": [
-      "pwd && date && whoami"
-    ],
-    "created_at": "2025-05-23T21:14:40.434039",
-    "status": "completed",
-    "container_id": "711f6454fce02572eeb60961646f39e72a8e98f725045fb1f8af76eca4f14658"
-  },
-  {
-    "session_id": "5d067fa5-2c20-482d-b423-ba40f3d76339",
-    "name": "session_20250523_211455",
-    "command": [
-      "ls /nonexistent/directory"
-    ],
-    "created_at": "2025-05-23T21:14:55.390997",
-    "status": "failed",
-    "container_id": "359d042d16c8ca37a31b9163477c171a7c6091da555a7fb8a1bbcde1508ed7cd"
+    "container_id": "6e731f54e251ab9f87ac830401335944cb6a1ffe9f37d2452f555f49919cae56"
   }
 ]

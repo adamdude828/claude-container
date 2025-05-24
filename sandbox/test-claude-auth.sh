@@ -1,27 +1,55 @@
 #!/bin/bash
-# Test Claude Code with mounted binary and auth
 
-CLAUDE_CODE_DIR="/Users/adamholsinger/Library/Application Support/Herd/config/nvm/versions/node/v18.20.4/lib/node_modules/@anthropic-ai/claude-code"
+# Test Claude authentication in a Docker container
+# This script creates a minimal container that mounts .claude directory
+# and tests if claude CLI is authenticated
 
-# Create a simple hello world script for Claude to write
-cat > test-task.sh << 'EOF'
-#!/bin/bash
-echo "Testing Claude Code authentication..."
-echo ""
-echo "Running: node /usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js -p 'say hello' --print"
-node /usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js -p "say hello" --print
+set -e
 
-echo ""
-echo "Exit code: $?"
-EOF
+echo "Testing Claude authentication in Docker container..."
 
-chmod +x test-task.sh
+# Check if .claude directory exists in home
+if [ ! -d "$HOME/.claude" ]; then
+    echo "Error: $HOME/.claude directory not found"
+    echo "Please ensure Claude is installed and authenticated on the host first"
+    exit 1
+fi
 
-# Run the test
+# Check if authentication file exists
+if [ ! -f "$HOME/.claude/config.json" ]; then
+    echo "Error: $HOME/.claude/config.json not found"
+    echo "Please ensure Claude is authenticated on the host first"
+    exit 1
+fi
+
+# Build and run container with mounted .claude and .claude.settings directories
 docker run --rm \
-  -v "$(pwd)":/workspace \
-  -v "$HOME/.claude.json":/root/.claude.json:rw \
-  -v "$HOME/.claude":/root/.claude:rw \
-  -v "$CLAUDE_CODE_DIR":/usr/local/lib/node_modules/@anthropic-ai/claude-code:ro \
-  claude-mount-test \
-  /workspace/test-task.sh
+    -v "$HOME/.claude:/root/.claude" \
+    -v "$HOME/.claude.settings:/root/.claude.settings" \
+    -e CLAUDE_CONFIG_DIR=/root/.claude \
+    node:20-slim \
+    bash -c '
+        # Install Claude in container
+        echo "Installing Claude CLI..."
+        npm install -g @anthropic-ai/claude-code >/dev/null 2>&1
+        
+        # Test Claude authentication
+        echo "Testing Claude authentication..."
+        claude -p "hello" --model=opus
+        
+        if [ $? -eq 0 ]; then
+            echo "✅ SUCCESS: Claude is authenticated and working!"
+            exit 0
+        else
+            echo "❌ FAILED: Claude authentication test failed"
+            exit 1
+        fi
+    '
+
+# Check exit status
+if [ $? -eq 0 ]; then
+    echo "Authentication test completed successfully!"
+else
+    echo "Authentication test failed!"
+    exit 1
+fi

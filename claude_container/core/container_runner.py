@@ -22,6 +22,12 @@ class ContainerRunner:
     
     def run_command(self, command: List[str]):
         """Run a command in the container."""
+        # Check if Docker image exists
+        if not self.docker_client.image_exists(self.image_name):
+            print(f"Error: Docker image '{self.image_name}' not found.")
+            print(f"Please run 'claude-container build' first to create the container image.")
+            return
+        
         volumes = self._get_volumes()
         cmd = ' '.join(command) if command else '/bin/bash'
         
@@ -72,11 +78,18 @@ class ContainerRunner:
             session = self.session_manager.get_session(continue_session)
             if not session:
                 raise ValueError(f"Session {continue_session} not found")
-            task_description = session.task
-            session_id = continue_session
+            task_description = session.name
+            session_id = session.session_id
         else:
-            session = self.session_manager.create_session(task_description)
-            session_id = session.id
+            # Create session with task description as name and claude command
+            claude_command = ['claude']
+            if task_description:
+                claude_command.append(task_description)
+            session = self.session_manager.create_session(
+                name=task_description or "Interactive Claude session",
+                command=claude_command
+            )
+            session_id = session.session_id
         
         # Prepare Claude command
         claude_cmd = ['claude']
@@ -115,7 +128,6 @@ class ContainerRunner:
         }
         
         # Always mount Claude configuration (read-write so Claude can update trusted folders)
-        # Mount to node user's home directory instead of root
         claude_config = Path.home() / '.claude.json'
         if claude_config.exists():
             volumes[str(claude_config)] = {'bind': '/home/node/.claude.json', 'mode': 'rw'}
@@ -137,27 +149,26 @@ class ContainerRunner:
         if gh_config_dir.exists():
             volumes[str(gh_config_dir)] = {'bind': '/home/node/.config/gh', 'mode': 'ro'}
         
-        # Mount host's Claude Code installation
+        # Mount host's npm global directory (includes Claude binary)
         try:
-            result = subprocess.run(['npm', 'root', '-g'], 
+            result = subprocess.run(['npm', 'config', 'get', 'prefix'], 
                                   capture_output=True, text=True, check=True)
-            node_modules = result.stdout.strip()
-            if node_modules and Path(node_modules).exists():
-                claude_code_path = Path(node_modules) / '@anthropic-ai' / 'claude-code'
-                if claude_code_path.exists():
-                    # Handle spaces in path with temporary symlink
-                    temp_link = Path('/tmp/claude-node-modules-link')
+            npm_prefix = result.stdout.strip()
+            if npm_prefix and Path(npm_prefix).exists():
+                # Handle spaces in path with temporary symlink
+                if ' ' in npm_prefix:
+                    temp_link = Path('/tmp/npm-global-link')
                     temp_link.unlink(missing_ok=True)
-                    temp_link.symlink_to(node_modules)
-                    volumes[str(temp_link)] = {'bind': '/host-node-modules', 'mode': 'ro'}
+                    temp_link.symlink_to(npm_prefix)
+                    volumes[str(temp_link)] = {'bind': '/host-npm-global', 'mode': 'ro'}
                 else:
-                    print("Warning: Claude Code not found in global node_modules. Install with 'npm install -g @anthropic-ai/claude-code'")
+                    volumes[npm_prefix] = {'bind': '/host-npm-global', 'mode': 'ro'}
             else:
-                print("Warning: Global node_modules directory not found")
+                print("Warning: npm prefix directory not found")
         except subprocess.CalledProcessError:
-            print("Warning: npm not found or failed to get global modules path")
+            print("Warning: npm not found or failed to get prefix path")
         except Exception as e:
-            print(f"Warning: Failed to setup Claude Code mount: {e}")
+            print(f"Warning: Failed to setup npm global mount: {e}")
         
         return volumes
     
@@ -172,11 +183,10 @@ class ContainerRunner:
             
         cmd = ' '.join(command)
         
-        # Check if image exists locally
-        try:
-            self.docker_client.client.images.get(self.image_name)
-        except:
-            print(f"Error: Image '{self.image_name}' not found. Please run 'build' first.")
+        # Check if Docker image exists
+        if not self.docker_client.image_exists(self.image_name):
+            print(f"Error: Docker image '{self.image_name}' not found.")
+            print(f"Please run 'claude-container build' first to create the container image.")
             return None
         
         # Determine if this is a long-running command (claude) vs short command
