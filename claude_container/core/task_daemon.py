@@ -466,6 +466,27 @@ chmod +x /tmp/claude-wrapper.sh
                 if gitconfig.exists():
                     volumes[str(gitconfig)] = {'bind': '/home/node/.gitconfig', 'mode': 'ro'}
             
+            # Mount host's npm global directory (includes Claude binary)
+            try:
+                result = subprocess.run(['npm', 'config', 'get', 'prefix'], 
+                                      capture_output=True, text=True, check=True)
+                npm_prefix = result.stdout.strip()
+                if npm_prefix and Path(npm_prefix).exists():
+                    # Handle spaces in path with temporary symlink
+                    if ' ' in npm_prefix:
+                        temp_link = Path('/tmp/npm-global-link')
+                        temp_link.unlink(missing_ok=True)
+                        temp_link.symlink_to(npm_prefix)
+                        volumes[str(temp_link)] = {'bind': '/host-npm-global', 'mode': 'ro'}
+                    else:
+                        volumes[npm_prefix] = {'bind': '/host-npm-global', 'mode': 'ro'}
+                else:
+                    logger.warning("npm prefix directory not found")
+            except subprocess.CalledProcessError:
+                logger.warning("npm not found or failed to get prefix path")
+            except Exception as e:
+                logger.warning(f"Failed to setup npm global mount: {e}")
+            
             # Get current user's UID and GID to run container with same permissions
             uid = os.getuid()
             gid = os.getgid()
