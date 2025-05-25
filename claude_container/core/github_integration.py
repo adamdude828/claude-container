@@ -3,8 +3,11 @@
 import subprocess
 import json
 import os
+import logging
 from typing import Optional, Dict, Tuple
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class GitHubIntegration:
@@ -35,31 +38,6 @@ class GitHubIntegration:
         finally:
             os.chdir(original_dir)
     
-    def create_pull_request(self, branch_name: str, title: str, body: str) -> Optional[str]:
-        """Create a pull request and return its URL."""
-        try:
-            # Save current directory
-            original_dir = os.getcwd()
-            os.chdir(self.project_dir)
-            
-            # Create PR as draft
-            result = subprocess.run([
-                'gh', 'pr', 'create',
-                '--title', title,
-                '--body', body,
-                '--draft',
-                '--head', branch_name
-            ], capture_output=True, text=True, check=True)
-            
-            # The URL is in stdout
-            pr_url = result.stdout.strip()
-            return pr_url
-            
-        except subprocess.CalledProcessError as e:
-            print(f"Error creating PR: {e.stderr}")
-            return None
-        finally:
-            os.chdir(original_dir)
     
     def update_pr_description(self, pr_number: str, description: str) -> bool:
         """Update PR description."""
@@ -131,6 +109,96 @@ class GitHubIntegration:
             return result.stdout.strip()
             
         except subprocess.CalledProcessError:
+            return None
+        finally:
+            os.chdir(original_dir)
+    
+    def get_pr_for_branch(self, branch_name: str) -> Optional[str]:
+        """Check if a PR already exists for the given branch."""
+        try:
+            original_dir = os.getcwd()
+            os.chdir(self.project_dir)
+            
+            logger.info(f"Checking for existing PR on branch: {branch_name}")
+            
+            # List PRs for the branch
+            cmd = [
+                'gh', 'pr', 'list',
+                '--head', branch_name,
+                '--json', 'url',
+                '--limit', '1'
+            ]
+            
+            logger.info(f"Running command: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            
+            logger.info(f"PR list stdout: {result.stdout}")
+            logger.info(f"PR list stderr: {result.stderr}")
+            
+            prs = json.loads(result.stdout)
+            if prs:
+                pr_url = prs[0]['url']
+                logger.info(f"Found existing PR: {pr_url}")
+                return pr_url
+            
+            logger.info("No existing PR found")
+            return None
+            
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Error checking for PR: {e}")
+            logger.error(f"Stdout: {e.stdout}")
+            logger.error(f"Stderr: {e.stderr}")
+            return None
+        except json.JSONDecodeError as e:
+            logger.error(f"Error parsing PR list JSON: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error checking for PR: {type(e).__name__}: {str(e)}", exc_info=True)
+            return None
+        finally:
+            os.chdir(original_dir)
+    
+    def create_pull_request(self, branch_name: str, title: str, body: str, draft: bool = True) -> Optional[str]:
+        """Create a pull request and return its URL."""
+        try:
+            # Save current directory
+            original_dir = os.getcwd()
+            os.chdir(self.project_dir)
+            
+            logger.info(f"Creating PR in directory: {self.project_dir}")
+            logger.info(f"Branch: {branch_name}, Draft: {draft}")
+            
+            # Build command
+            cmd = [
+                'gh', 'pr', 'create',
+                '--title', title,
+                '--body', body,
+                '--head', branch_name
+            ]
+            if draft:
+                cmd.append('--draft')
+            
+            logger.info(f"Running command: {' '.join(cmd)}")
+            
+            # Create PR
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            
+            # Extract PR URL from output
+            pr_url = result.stdout.strip()
+            logger.info(f"PR creation stdout: {result.stdout}")
+            logger.info(f"PR creation stderr: {result.stderr}")
+            
+            return pr_url if pr_url else None
+            
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Error creating PR: {e}")
+            logger.error(f"Command: {' '.join(e.cmd)}")
+            logger.error(f"Return code: {e.returncode}")
+            logger.error(f"Stdout: {e.stdout}")
+            logger.error(f"Stderr: {e.stderr}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error creating PR: {type(e).__name__}: {str(e)}", exc_info=True)
             return None
         finally:
             os.chdir(original_dir)

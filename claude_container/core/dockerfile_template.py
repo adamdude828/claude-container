@@ -16,16 +16,26 @@ RUN id -u node &>/dev/null || useradd -m -s /bin/bash node
 RUN mkdir -p /home/node/.claude /workspace && \\
     chown -R node:node /home/node/.claude /workspace
 
-# Create Claude wrapper script that will be available to all users
+# Create Claude wrapper scripts that will be available to all users
 RUN if [ -f /usr/local/bin/claude ]; then rm /usr/local/bin/claude; fi && \\
     echo '#!/bin/bash' > /usr/local/bin/claude && \\
     echo 'if [ -f "/host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js" ]; then' >> /usr/local/bin/claude && \\
+    echo '    # Ensure claude.json exists with proper permissions' >> /usr/local/bin/claude && \\
+    echo '    if [ -f "/home/node/.claude.json" ] && [ ! -r "/home/node/.claude.json" ]; then' >> /usr/local/bin/claude && \\
+    echo '        # If file exists but not readable, copy its contents' >> /usr/local/bin/claude && \\
+    echo '        sudo cat /home/node/.claude.json > /tmp/claude.json 2>/dev/null || echo '"'"'{{"dangerouslySkipPermissions": true}}'"'"' > /tmp/claude.json' >> /usr/local/bin/claude && \\
+    echo '        cp /tmp/claude.json /home/node/.claude.json' >> /usr/local/bin/claude && \\
+    echo '    elif [ ! -f "/home/node/.claude.json" ]; then' >> /usr/local/bin/claude && \\
+    echo '        echo '"'"'{{"dangerouslySkipPermissions": true}}'"'"' > /home/node/.claude.json' >> /usr/local/bin/claude && \\
+    echo '    fi' >> /usr/local/bin/claude && \\
+    echo '    export CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true' >> /usr/local/bin/claude && \\
     echo '    exec node /host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js "$@"' >> /usr/local/bin/claude && \\
     echo 'else' >> /usr/local/bin/claude && \\
     echo '    echo "Error: Claude Code not found in mounted npm global directory"' >> /usr/local/bin/claude && \\
     echo '    exit 1' >> /usr/local/bin/claude && \\
     echo 'fi' >> /usr/local/bin/claude && \\
-    chmod +x /usr/local/bin/claude
+    chmod +x /usr/local/bin/claude && \\
+    ln -sf /usr/local/bin/claude /usr/local/bin/claude-code
 
 # Create simple entrypoint
 RUN echo '#!/bin/bash' > /entrypoint.sh && \\
@@ -99,16 +109,26 @@ RUN useradd -m -s /bin/bash node && \
     mkdir -p /home/node/.claude /workspace && \
     chown -R node:node /home/node/.claude /workspace
 
-# Create Claude wrapper script that will be available to all users
+# Create Claude wrapper scripts that will be available to all users
 RUN if [ -f /usr/local/bin/claude ]; then rm /usr/local/bin/claude; fi && \\
     echo '#!/bin/bash' > /usr/local/bin/claude && \\
     echo 'if [ -f "/host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js" ]; then' >> /usr/local/bin/claude && \\
+    echo '    # Ensure claude.json exists with proper permissions' >> /usr/local/bin/claude && \\
+    echo '    if [ -f "/home/node/.claude.json" ] && [ ! -r "/home/node/.claude.json" ]; then' >> /usr/local/bin/claude && \\
+    echo '        # If file exists but not readable, copy its contents' >> /usr/local/bin/claude && \\
+    echo '        sudo cat /home/node/.claude.json > /tmp/claude.json 2>/dev/null || echo '"'"'{{"dangerouslySkipPermissions": true}}'"'"' > /tmp/claude.json' >> /usr/local/bin/claude && \\
+    echo '        cp /tmp/claude.json /home/node/.claude.json' >> /usr/local/bin/claude && \\
+    echo '    elif [ ! -f "/home/node/.claude.json" ]; then' >> /usr/local/bin/claude && \\
+    echo '        echo '"'"'{{"dangerouslySkipPermissions": true}}'"'"' > /home/node/.claude.json' >> /usr/local/bin/claude && \\
+    echo '    fi' >> /usr/local/bin/claude && \\
+    echo '    export CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true' >> /usr/local/bin/claude && \\
     echo '    exec node /host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js "$@"' >> /usr/local/bin/claude && \\
     echo 'else' >> /usr/local/bin/claude && \\
     echo '    echo "Error: Claude Code not found in mounted npm global directory"' >> /usr/local/bin/claude && \\
     echo '    exit 1' >> /usr/local/bin/claude && \\
     echo 'fi' >> /usr/local/bin/claude && \\
-    chmod +x /usr/local/bin/claude
+    chmod +x /usr/local/bin/claude && \\
+    ln -sf /usr/local/bin/claude /usr/local/bin/claude-code
 
 # Create simple entrypoint
 RUN echo '#!/bin/bash' > /entrypoint.sh && \\
@@ -199,16 +219,26 @@ RUN (id -u node &>/dev/null || adduser --disabled-password --gecos '' node) && \
     mkdir -p /home/node/.claude /workspace && \
     chown -R node:node /home/node/.claude /workspace
 
-# Create Claude wrapper script that will be available to all users
+# Create Claude wrapper scripts that will be available to all users
 RUN if [ -f /usr/local/bin/claude ]; then rm /usr/local/bin/claude; fi && \\
     echo '#!/bin/bash' > /usr/local/bin/claude && \\
     echo 'if [ -f "/host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js" ]; then' >> /usr/local/bin/claude && \\
+    echo '    # Ensure claude.json exists with proper permissions' >> /usr/local/bin/claude && \\
+    echo '    if [ -f "/home/node/.claude.json" ] && [ ! -r "/home/node/.claude.json" ]; then' >> /usr/local/bin/claude && \\
+    echo '        # If file exists but not readable, copy its contents' >> /usr/local/bin/claude && \\
+    echo '        sudo cat /home/node/.claude.json > /tmp/claude.json 2>/dev/null || echo '"'"'{{"dangerouslySkipPermissions": true}}'"'"' > /tmp/claude.json' >> /usr/local/bin/claude && \\
+    echo '        cp /tmp/claude.json /home/node/.claude.json' >> /usr/local/bin/claude && \\
+    echo '    elif [ ! -f "/home/node/.claude.json" ]; then' >> /usr/local/bin/claude && \\
+    echo '        echo '"'"'{{"dangerouslySkipPermissions": true}}'"'"' > /home/node/.claude.json' >> /usr/local/bin/claude && \\
+    echo '    fi' >> /usr/local/bin/claude && \\
+    echo '    export CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true' >> /usr/local/bin/claude && \\
     echo '    exec node /host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js "$@"' >> /usr/local/bin/claude && \\
     echo 'else' >> /usr/local/bin/claude && \\
     echo '    echo "Error: Claude Code not found in mounted npm global directory"' >> /usr/local/bin/claude && \\
     echo '    exit 1' >> /usr/local/bin/claude && \\
     echo 'fi' >> /usr/local/bin/claude && \\
-    chmod +x /usr/local/bin/claude
+    chmod +x /usr/local/bin/claude && \\
+    ln -sf /usr/local/bin/claude /usr/local/bin/claude-code
 
 # Create simple entrypoint
 RUN echo '#!/bin/bash' > /entrypoint.sh && \\
