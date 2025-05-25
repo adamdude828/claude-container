@@ -1,0 +1,65 @@
+FROM node:20
+
+# Ensure Node.js 18+ is available (for node base images)
+RUN node_version=$(node --version 2>/dev/null | cut -d'v' -f2 | cut -d'.' -f1) && \
+    if [ -z "$node_version" ] || [ "$node_version" -lt 18 ]; then \
+        echo "Error: Node.js 18+ is required but not found or version too old"; \
+        exit 1; \
+    fi
+
+# Ensure the node user exists (should exist in node:20 images)
+RUN id -u node &>/dev/null || useradd -m -s /bin/bash node
+
+# Create directories with proper ownership
+RUN mkdir -p /home/node/.claude /workspace && \
+    chown -R node:node /home/node/.claude /workspace
+
+# Create Claude wrapper scripts that will be available to all users
+RUN if [ -f /usr/local/bin/claude ]; then rm /usr/local/bin/claude; fi && \
+    echo '#!/bin/bash' > /usr/local/bin/claude && \
+    echo 'if [ -f "/host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js" ]; then' >> /usr/local/bin/claude && \
+    echo '    # Create a minimal claude.json if it doesn'"'"'t exist' >> /usr/local/bin/claude && \
+    echo '    if [ ! -f "/home/node/.claude.json" ]; then' >> /usr/local/bin/claude && \
+    echo '        echo '"'"'{"dangerouslySkipPermissions": true}'"'"' > /home/node/.claude.json' >> /usr/local/bin/claude && \
+    echo '    fi' >> /usr/local/bin/claude && \
+    echo '    exec node /host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js "$@"' >> /usr/local/bin/claude && \
+    echo 'else' >> /usr/local/bin/claude && \
+    echo '    echo "Error: Claude Code not found in mounted npm global directory"' >> /usr/local/bin/claude && \
+    echo '    exit 1' >> /usr/local/bin/claude && \
+    echo 'fi' >> /usr/local/bin/claude && \
+    chmod +x /usr/local/bin/claude && \
+    ln -sf /usr/local/bin/claude /usr/local/bin/claude-code
+
+# Create simple entrypoint
+RUN echo '#!/bin/bash' > /entrypoint.sh && \
+    echo 'exec "$@"' >> /entrypoint.sh && \
+    chmod +x /entrypoint.sh
+
+# Switch to node user for npm installs
+USER node
+
+# Set npm prefix for global installs as node user
+ENV NPM_CONFIG_PREFIX=/home/node/.npm-global
+ENV PATH=$PATH:/home/node/.npm-global/bin
+
+# Install additional Node.js package managers
+RUN npm install -g pnpm || true
+
+# No runtime overrides
+
+# No custom environment variables
+
+# Copy project code
+COPY . /workspace
+
+# Switch to node user
+USER node
+
+# Set working directory
+WORKDIR /workspace
+
+# Use entrypoint to setup Claude Code and run commands
+ENTRYPOINT ["/entrypoint.sh"]
+
+# Default command
+CMD ["claude"]

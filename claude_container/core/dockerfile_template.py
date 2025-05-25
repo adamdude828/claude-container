@@ -20,6 +20,10 @@ RUN mkdir -p /home/node/.claude /workspace && \\
 RUN if [ -f /usr/local/bin/claude ]; then rm /usr/local/bin/claude; fi && \\
     echo '#!/bin/bash' > /usr/local/bin/claude && \\
     echo 'if [ -f "/host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js" ]; then' >> /usr/local/bin/claude && \\
+    echo '    # Create a minimal claude.json if it doesn'"'"'t exist' >> /usr/local/bin/claude && \\
+    echo '    if [ ! -f "/home/node/.claude.json" ]; then' >> /usr/local/bin/claude && \\
+    echo '        echo '"'"'{{"dangerouslySkipPermissions": true}}'"'"' > /home/node/.claude.json' >> /usr/local/bin/claude && \\
+    echo '    fi' >> /usr/local/bin/claude && \\
     echo '    exec node /host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js "$@"' >> /usr/local/bin/claude && \\
     echo 'else' >> /usr/local/bin/claude && \\
     echo '    echo "Error: Claude Code not found in mounted npm global directory"' >> /usr/local/bin/claude && \\
@@ -104,6 +108,10 @@ RUN useradd -m -s /bin/bash node && \
 RUN if [ -f /usr/local/bin/claude ]; then rm /usr/local/bin/claude; fi && \\
     echo '#!/bin/bash' > /usr/local/bin/claude && \\
     echo 'if [ -f "/host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js" ]; then' >> /usr/local/bin/claude && \\
+    echo '    # Create a minimal claude.json if it doesn'"'"'t exist' >> /usr/local/bin/claude && \\
+    echo '    if [ ! -f "/home/node/.claude.json" ]; then' >> /usr/local/bin/claude && \\
+    echo '        echo '"'"'{{"dangerouslySkipPermissions": true}}'"'"' > /home/node/.claude.json' >> /usr/local/bin/claude && \\
+    echo '    fi' >> /usr/local/bin/claude && \\
     echo '    exec node /host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js "$@"' >> /usr/local/bin/claude && \\
     echo 'else' >> /usr/local/bin/claude && \\
     echo '    echo "Error: Claude Code not found in mounted npm global directory"' >> /usr/local/bin/claude && \\
@@ -205,6 +213,10 @@ RUN (id -u node &>/dev/null || adduser --disabled-password --gecos '' node) && \
 RUN if [ -f /usr/local/bin/claude ]; then rm /usr/local/bin/claude; fi && \\
     echo '#!/bin/bash' > /usr/local/bin/claude && \\
     echo 'if [ -f "/host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js" ]; then' >> /usr/local/bin/claude && \\
+    echo '    # Create a minimal claude.json if it doesn'"'"'t exist' >> /usr/local/bin/claude && \\
+    echo '    if [ ! -f "/home/node/.claude.json" ]; then' >> /usr/local/bin/claude && \\
+    echo '        echo '"'"'{{"dangerouslySkipPermissions": true}}'"'"' > /home/node/.claude.json' >> /usr/local/bin/claude && \\
+    echo '    fi' >> /usr/local/bin/claude && \\
     echo '    exec node /host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js "$@"' >> /usr/local/bin/claude && \\
     echo 'else' >> /usr/local/bin/claude && \\
     echo '    echo "Error: Claude Code not found in mounted npm global directory"' >> /usr/local/bin/claude && \\
