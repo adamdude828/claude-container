@@ -9,8 +9,19 @@ def get_claude_wrapper_script() -> str:
 # Ensure PATH includes claude command location
 export PATH="/home/node/.local/bin:$PATH"
 
+# Set git environment variables to avoid config file issues
+export GIT_AUTHOR_NAME="Claude Container"
+export GIT_AUTHOR_EMAIL="claude@container.local"
+export GIT_COMMITTER_NAME="Claude Container"
+export GIT_COMMITTER_EMAIL="claude@container.local"
+
 BRANCH_NAME=$1
 shift  # Remove branch name from arguments
+
+# Define git function with safe.directory config
+git() {
+    command git -c safe.directory=/workspace "$@"
+}
 
 # Switch to the branch
 echo "Switching to branch: $BRANCH_NAME"
@@ -52,4 +63,7 @@ fi
 if [ -z "$(git config --global user.name)" ]; then
     git config --global user.name "Claude Container"
 fi
+
+# Mark /workspace as a safe directory to handle ownership issues
+git config --global --add safe.directory /workspace
 '''
