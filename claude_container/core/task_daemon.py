@@ -401,7 +401,7 @@ EOF
 chmod +x /tmp/claude-wrapper.sh
 
 # Run wrapper with branch and command
-/tmp/claude-wrapper.sh {task.branch_name} {' '.join(shlex.quote(arg) for arg in command)}
+/tmp/claude-wrapper.sh {task.branch_name} {' '.join(shlex.quote(arg) for arg in task.command)}
 '''
             ]
             command = full_command
@@ -447,8 +447,14 @@ chmod +x /tmp/claude-wrapper.sh
                 container_working_dir = '/workspace'
             
             # Mount Claude configuration to node user's home
-            # Don't mount the .claude directory - we'll create everything fresh in the container
-            # This avoids permission issues with existing files
+            claude_config = Path.home() / '.claude.json'
+            if claude_config.exists():
+                volumes[str(claude_config)] = {'bind': '/home/node/.claude.json', 'mode': 'rw'}
+            
+            # Mount .claude directory as read-write
+            claude_dir = Path.home() / '.claude'
+            if claude_dir.exists():
+                volumes[str(claude_dir)] = {'bind': '/home/node/.claude', 'mode': 'rw'}
             
             # Mount SSH keys for git operations if branch is set
             if task.branch_name:
@@ -509,9 +515,28 @@ chmod +x /tmp/claude-wrapper.sh
                 }
             )
             
-            # Stream logs
-            for line in container.logs(stream=True, follow=True):
-                task.output.append(line.decode('utf-8').rstrip())
+            # Stream logs with proper UTF-8 handling
+            buffer = b''
+            for chunk in container.logs(stream=True, follow=True):
+                buffer += chunk
+                # Try to decode what we have
+                try:
+                    decoded = buffer.decode('utf-8')
+                    # Success - add to output and clear buffer
+                    if decoded.strip():  # Only add non-empty lines
+                        # Split by newlines and add each line
+                        for line in decoded.splitlines():
+                            if line.strip():
+                                task.output.append(line)
+                    buffer = b''
+                except UnicodeDecodeError as e:
+                    # Partial UTF-8 sequence - keep in buffer
+                    if e.reason == 'unexpected end of data':
+                        continue
+                    else:
+                        # Real decode error - skip the bad byte
+                        task.output.append(f"[Decode error at byte {e.start}]")
+                        buffer = buffer[e.end:]
             
             # Get exit code
             container.reload()

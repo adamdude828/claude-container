@@ -31,33 +31,9 @@ git checkout $BRANCH_NAME
 echo "Pulling latest changes..."
 git pull origin $BRANCH_NAME
 
-# Ensure .claude directory exists and is writable
-mkdir -p /home/node/.claude 2>/dev/null || true
-
-# Remove existing config.json if it exists and is not writable
-if [ -f /home/node/.claude/config.json ] && [ ! -w /home/node/.claude/config.json ]; then
-    echo "DEBUG: Removing read-only config.json"
-    rm -f /home/node/.claude/config.json 2>/dev/null || true
-fi
-
-# Create config.json with API key and dangerouslySkipPermissions
-# Using a temporary file first to ensure we can write
-TMP_CONFIG=$(mktemp)
-cat > "$TMP_CONFIG" << EOF
-{
-  "version": "0.0.1",
-  "apiKey": "${ANTHROPIC_API_KEY}",
-  "dangerouslySkipPermissions": true
-}
-EOF
-
-# Copy to final location
-cp "$TMP_CONFIG" /home/node/.claude/config.json 2>/dev/null || {
-    echo "ERROR: Cannot write config.json to /home/node/.claude/"
-    echo "DEBUG: Directory permissions:"
-    ls -la /home/node/.claude/
-}
-rm -f "$TMP_CONFIG"
+# Check if .claude directory is mounted correctly
+echo "DEBUG: Checking .claude mount:"
+ls -la /home/node/.claude/ | head -5
 
 # Create a very permissive settings.json that allows all tools
 cat > /home/node/.claude/settings.json << 'EOF'
@@ -87,14 +63,15 @@ EOF
 
 # Run claude code with remaining arguments  
 echo "Running Claude Code..."
-echo "DEBUG: Created config.json and settings.json"
-echo "DEBUG: config.json content:"
-cat /home/node/.claude/config.json 2>/dev/null || echo "No config.json"
-echo "DEBUG: Running claude-code with args: $@"
+echo "DEBUG: Number of arguments: $#"
+echo "DEBUG: First few args:"
+echo "  \$1: $1"
+echo "  \$2: $2"
+echo "  \$3: $(echo "$3" | head -c 100)..."
 
 # Try running claude-code directly with the npm global path
 if [ -f "/host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js" ]; then
-    node /host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js "$@"
+    exec node /host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js "$@"
     CLAUDE_EXIT_CODE=$?
 else
     echo "ERROR: Claude Code CLI not found at expected path"
