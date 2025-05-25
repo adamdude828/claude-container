@@ -31,10 +31,23 @@ git checkout $BRANCH_NAME
 echo "Pulling latest changes..."
 git pull origin $BRANCH_NAME
 
-# Run claude code with remaining arguments
+# Run claude code with remaining arguments  
 echo "Running Claude Code..."
-claude-code "$@"
-CLAUDE_EXIT_CODE=$?
+# Debug: show environment and config
+echo "DEBUG: HOME=$HOME"
+echo "DEBUG: CLAUDE_CONFIG_DIR=$CLAUDE_CONFIG_DIR"
+echo "DEBUG: Checking .claude.json:"
+cat /home/node/.claude.json 2>/dev/null | head -5 || echo "No .claude.json found"
+echo "DEBUG: Running claude-code with args: $@"
+
+# Try running claude-code directly with the npm global path
+if [ -f "/host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js" ]; then
+    node /host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js "$@"
+    CLAUDE_EXIT_CODE=$?
+else
+    echo "ERROR: Claude Code CLI not found at expected path"
+    CLAUDE_EXIT_CODE=1
+fi
 
 # Commit any changes
 if [[ -n $(git status -s) ]]; then
