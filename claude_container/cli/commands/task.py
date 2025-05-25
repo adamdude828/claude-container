@@ -149,7 +149,7 @@ Remember to:
     
     try:
         response = client.submit_task(
-            command=["claude-code", "--dangerously-skip-permissions", "-p", claude_prompt],
+            command=["claude-code", "--no-interactive", "-p", claude_prompt],
             working_dir=working_dir,
             env=None,
             metadata={

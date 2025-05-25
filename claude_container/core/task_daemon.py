@@ -493,6 +493,8 @@ chmod +x /tmp/claude-wrapper.sh
                 volumes=volumes,
                 working_dir=container_working_dir,
                 detach=True,
+                tty=True,  # Allocate a pseudo-TTY
+                stdin_open=False,  # Don't keep stdin open
                 name=f"claude-task-{task.task_id[:8]}",
                 # Don't set user - run as default container user (node) for proper permissions
                 environment={
@@ -500,7 +502,10 @@ chmod +x /tmp/claude-wrapper.sh
                     'CLAUDE_CONFIG_DIR': '/home/node/.claude',
                     'HOME': '/home/node',  # Ensure HOME is set for git
                     'CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS': 'true',  # Skip permissions check
-                    'ANTHROPIC_API_KEY': os.environ.get('ANTHROPIC_API_KEY', '')  # Pass API key from host
+                    'ANTHROPIC_API_KEY': os.environ.get('ANTHROPIC_API_KEY', ''),  # Pass API key from host
+                    'CI': 'true',  # Force non-interactive mode
+                    'NONINTERACTIVE': '1',  # Another common env var for non-interactive
+                    'DEBIAN_FRONTEND': 'noninteractive'  # Debian-style non-interactive
                 }
             )
             
