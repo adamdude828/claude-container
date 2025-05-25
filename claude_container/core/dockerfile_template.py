@@ -16,7 +16,7 @@ RUN id -u node &>/dev/null || useradd -m -s /bin/bash node
 RUN mkdir -p /home/node/.claude /workspace && \\
     chown -R node:node /home/node/.claude /workspace
 
-# Create Claude wrapper script that will be available to all users
+# Create Claude wrapper scripts that will be available to all users
 RUN if [ -f /usr/local/bin/claude ]; then rm /usr/local/bin/claude; fi && \\
     echo '#!/bin/bash' > /usr/local/bin/claude && \\
     echo 'if [ -f "/host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js" ]; then' >> /usr/local/bin/claude && \\
@@ -25,7 +25,8 @@ RUN if [ -f /usr/local/bin/claude ]; then rm /usr/local/bin/claude; fi && \\
     echo '    echo "Error: Claude Code not found in mounted npm global directory"' >> /usr/local/bin/claude && \\
     echo '    exit 1' >> /usr/local/bin/claude && \\
     echo 'fi' >> /usr/local/bin/claude && \\
-    chmod +x /usr/local/bin/claude
+    chmod +x /usr/local/bin/claude && \\
+    ln -sf /usr/local/bin/claude /usr/local/bin/claude-code
 
 # Create simple entrypoint
 RUN echo '#!/bin/bash' > /entrypoint.sh && \\
@@ -99,7 +100,7 @@ RUN useradd -m -s /bin/bash node && \
     mkdir -p /home/node/.claude /workspace && \
     chown -R node:node /home/node/.claude /workspace
 
-# Create Claude wrapper script that will be available to all users
+# Create Claude wrapper scripts that will be available to all users
 RUN if [ -f /usr/local/bin/claude ]; then rm /usr/local/bin/claude; fi && \\
     echo '#!/bin/bash' > /usr/local/bin/claude && \\
     echo 'if [ -f "/host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js" ]; then' >> /usr/local/bin/claude && \\
@@ -108,7 +109,8 @@ RUN if [ -f /usr/local/bin/claude ]; then rm /usr/local/bin/claude; fi && \\
     echo '    echo "Error: Claude Code not found in mounted npm global directory"' >> /usr/local/bin/claude && \\
     echo '    exit 1' >> /usr/local/bin/claude && \\
     echo 'fi' >> /usr/local/bin/claude && \\
-    chmod +x /usr/local/bin/claude
+    chmod +x /usr/local/bin/claude && \\
+    ln -sf /usr/local/bin/claude /usr/local/bin/claude-code
 
 # Create simple entrypoint
 RUN echo '#!/bin/bash' > /entrypoint.sh && \\
@@ -199,7 +201,7 @@ RUN (id -u node &>/dev/null || adduser --disabled-password --gecos '' node) && \
     mkdir -p /home/node/.claude /workspace && \
     chown -R node:node /home/node/.claude /workspace
 
-# Create Claude wrapper script that will be available to all users
+# Create Claude wrapper scripts that will be available to all users
 RUN if [ -f /usr/local/bin/claude ]; then rm /usr/local/bin/claude; fi && \\
     echo '#!/bin/bash' > /usr/local/bin/claude && \\
     echo 'if [ -f "/host-npm-global/lib/node_modules/@anthropic-ai/claude-code/cli.js" ]; then' >> /usr/local/bin/claude && \\
@@ -208,7 +210,8 @@ RUN if [ -f /usr/local/bin/claude ]; then rm /usr/local/bin/claude; fi && \\
     echo '    echo "Error: Claude Code not found in mounted npm global directory"' >> /usr/local/bin/claude && \\
     echo '    exit 1' >> /usr/local/bin/claude && \\
     echo 'fi' >> /usr/local/bin/claude && \\
-    chmod +x /usr/local/bin/claude
+    chmod +x /usr/local/bin/claude && \\
+    ln -sf /usr/local/bin/claude /usr/local/bin/claude-code
 
 # Create simple entrypoint
 RUN echo '#!/bin/bash' > /entrypoint.sh && \\

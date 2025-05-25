@@ -33,7 +33,7 @@ git pull origin $BRANCH_NAME
 
 # Run claude code with remaining arguments
 echo "Running Claude Code..."
-claude "$@"
+claude-code "$@"
 CLAUDE_EXIT_CODE=$?
 
 # Commit any changes
