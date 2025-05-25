@@ -503,7 +503,8 @@ chmod +x /tmp/claude-wrapper.sh
                 environment={
                     'CLAUDE_TASK_ID': task.task_id,
                     'CLAUDE_CONFIG_DIR': '/home/node/.claude',
-                    'HOME': '/home/node'  # Ensure HOME is set for git
+                    'HOME': '/home/node',  # Ensure HOME is set for git
+                    'CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS': 'true'  # Skip permissions check
                 }
             )
             
