@@ -447,13 +447,8 @@ chmod +x /tmp/claude-wrapper.sh
                 container_working_dir = '/workspace'
             
             # Mount Claude configuration to node user's home
-            claude_config = Path.home() / '.claude.json'
-            if claude_config.exists():
-                volumes[str(claude_config)] = {'bind': '/home/node/.claude.json', 'mode': 'rw'}
-            
-            claude_dir = Path.home() / '.claude'
-            if claude_dir.exists():
-                volumes[str(claude_dir)] = {'bind': '/home/node/.claude', 'mode': 'rw'}
+            # Don't mount the .claude directory - we'll create everything fresh in the container
+            # This avoids permission issues with existing files
             
             # Mount SSH keys for git operations if branch is set
             if task.branch_name:
@@ -504,7 +499,8 @@ chmod +x /tmp/claude-wrapper.sh
                     'CLAUDE_TASK_ID': task.task_id,
                     'CLAUDE_CONFIG_DIR': '/home/node/.claude',
                     'HOME': '/home/node',  # Ensure HOME is set for git
-                    'CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS': 'true'  # Skip permissions check
+                    'CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS': 'true',  # Skip permissions check
+                    'ANTHROPIC_API_KEY': os.environ.get('ANTHROPIC_API_KEY', '')  # Pass API key from host
                 }
             )
             

@@ -31,13 +31,65 @@ git checkout $BRANCH_NAME
 echo "Pulling latest changes..."
 git pull origin $BRANCH_NAME
 
+# Ensure .claude directory exists and is writable
+mkdir -p /home/node/.claude 2>/dev/null || true
+
+# Remove existing config.json if it exists and is not writable
+if [ -f /home/node/.claude/config.json ] && [ ! -w /home/node/.claude/config.json ]; then
+    echo "DEBUG: Removing read-only config.json"
+    rm -f /home/node/.claude/config.json 2>/dev/null || true
+fi
+
+# Create config.json with API key and dangerouslySkipPermissions
+# Using a temporary file first to ensure we can write
+TMP_CONFIG=$(mktemp)
+cat > "$TMP_CONFIG" << EOF
+{
+  "version": "0.0.1",
+  "apiKey": "${ANTHROPIC_API_KEY}",
+  "dangerouslySkipPermissions": true
+}
+EOF
+
+# Copy to final location
+cp "$TMP_CONFIG" /home/node/.claude/config.json 2>/dev/null || {
+    echo "ERROR: Cannot write config.json to /home/node/.claude/"
+    echo "DEBUG: Directory permissions:"
+    ls -la /home/node/.claude/
+}
+rm -f "$TMP_CONFIG"
+
+# Create a very permissive settings.json that allows all tools
+cat > /home/node/.claude/settings.json << 'EOF'
+{
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Read(*)",
+      "Write(*)",
+      "Edit(*)",
+      "MultiEdit(*)",
+      "Glob(*)",
+      "Grep(*)",
+      "LS(*)",
+      "NotebookRead(*)",
+      "NotebookEdit(*)",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "TodoRead(*)",
+      "TodoWrite(*)",
+      "Task(*)"
+    ],
+    "deny": []
+  }
+}
+EOF
+
 # Run claude code with remaining arguments  
 echo "Running Claude Code..."
-# Debug: show environment and config
-echo "DEBUG: HOME=$HOME"
-echo "DEBUG: CLAUDE_CONFIG_DIR=$CLAUDE_CONFIG_DIR"
-echo "DEBUG: Checking .claude.json:"
-cat /home/node/.claude.json 2>/dev/null | head -5 || echo "No .claude.json found"
+echo "DEBUG: Created config.json and settings.json"
+echo "DEBUG: config.json content:"
+cat /home/node/.claude/config.json 2>/dev/null || echo "No config.json"
 echo "DEBUG: Running claude-code with args: $@"
 
 # Try running claude-code directly with the npm global path
