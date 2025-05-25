@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(poetry init:*)",
+      "Bash(poetry add:*)",
+      "Bash(mkdir:*)",
+      "Bash(touch:*)",
+      "Bash(poetry install:*)",
+      "Bash(python:*)",
+      "Bash(docker:*)",
+      "Bash(ls:*)",
+      "Bash(claude-container build --force-rebuild)",
+      "Bash(cat:*)",
+      "Bash(rm:*)",
+      "Bash(poetry run:*)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "Bash(grep:*)",
+      "Bash(claude-container:*)",
+      "Bash(pip install:*)",
+      "Bash(chmod:*)",
+      "Bash(./test-host-claude-in-container.sh:*)",
+      "Bash(./test-claude-with-node.sh:*)",
+      "Bash(./test-claude-wrapper.sh:*)",
+      "Bash(./test-full-claude-setup.sh:*)",
+      "Bash(./test-permissions-issue.sh:*)",
+      "Bash(./test-claude-config-location.sh:*)",
+      "Bash(./test-claude-mount.sh:*)",
+      "Bash(./test-npm-prefix-mount.sh)",
+      "Bash(./test-mount-npm-global.sh:*)"
+    ],
+    "deny": []
+  }
+}
