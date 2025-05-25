@@ -499,7 +499,7 @@ chmod +x /tmp/claude-wrapper.sh
                 working_dir=container_working_dir,
                 detach=True,
                 name=f"claude-task-{task.task_id[:8]}",
-                user=f"{uid}:{gid}",  # Run as current user
+                # Don't set user - run as default container user (node) for proper permissions
                 environment={
                     'CLAUDE_TASK_ID': task.task_id,
                     'CLAUDE_CONFIG_DIR': '/home/node/.claude',
