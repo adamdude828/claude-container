@@ -2,7 +2,7 @@
 
 import json
 import socket
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 
 class DaemonClient:

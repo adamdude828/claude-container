@@ -1,6 +1,5 @@
 """Task daemon for managing Claude Code processes."""
 
-import asyncio
 import json
 import socket
 import os
@@ -265,7 +264,6 @@ class TaskDaemon:
     def _execute_task(self, task: ClaudeTask):
         """Execute a Claude Code task in a Docker container."""
         import docker
-        from pathlib import Path
         
         task.status = "running"
         task.started_at = datetime.now()
@@ -335,25 +333,25 @@ chmod +x /tmp/git-config.sh /tmp/claude-wrapper.sh
                 str(project_path): {'bind': '/workspace', 'mode': 'rw'},
             }
             
-            # Mount Claude configuration to node user's home
+            # Mount Claude configuration to root user's home
             claude_config = Path.home() / '.claude.json'
             if claude_config.exists():
-                volumes[str(claude_config)] = {'bind': '/home/node/.claude.json', 'mode': 'rw'}
+                volumes[str(claude_config)] = {'bind': '/root/.claude.json', 'mode': 'rw'}
             
             claude_dir = Path.home() / '.claude'
             if claude_dir.exists():
-                volumes[str(claude_dir)] = {'bind': '/home/node/.claude', 'mode': 'rw'}
+                volumes[str(claude_dir)] = {'bind': '/root/.claude', 'mode': 'rw'}
             
             # Mount SSH keys for git operations if branch is set
             if task.branch_name:
                 ssh_dir = Path.home() / '.ssh'
                 if ssh_dir.exists():
-                    volumes[str(ssh_dir)] = {'bind': '/home/node/.ssh', 'mode': 'ro'}
+                    volumes[str(ssh_dir)] = {'bind': '/root/.ssh', 'mode': 'ro'}
                 
                 # Mount git config
                 gitconfig = Path.home() / '.gitconfig'
                 if gitconfig.exists():
-                    volumes[str(gitconfig)] = {'bind': '/home/node/.gitconfig', 'mode': 'ro'}
+                    volumes[str(gitconfig)] = {'bind': '/root/.gitconfig', 'mode': 'ro'}
             
             # Run container
             container = client.containers.run(
@@ -365,7 +363,7 @@ chmod +x /tmp/git-config.sh /tmp/claude-wrapper.sh
                 name=f"claude-task-{task.task_id[:8]}",
                 environment={
                     'CLAUDE_TASK_ID': task.task_id,
-                    'CLAUDE_CONFIG_DIR': '/home/node/.claude'
+                    'CLAUDE_CONFIG_DIR': '/root/.claude'
                 }
             )
             

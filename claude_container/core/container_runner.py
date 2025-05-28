@@ -1,6 +1,5 @@
 """Container running functionality."""
 
-import subprocess
 from pathlib import Path
 from typing import List, Optional, Dict
 
@@ -25,7 +24,7 @@ class ContainerRunner:
         # Check if Docker image exists
         if not self.docker_client.image_exists(self.image_name):
             print(f"Error: Docker image '{self.image_name}' not found.")
-            print(f"Please run 'claude-container build' first to create the container image.")
+            print("Please run 'claude-container build' first to create the container image.")
             return
         
         volumes = self._get_volumes()
@@ -44,8 +43,9 @@ class ContainerRunner:
                     stdin_open=True,  # Allow stdin for interactive commands
                     remove=True,
                     environment={
-                        'CLAUDE_CONFIG_DIR': '/home/node/.claude',
-                        'NODE_OPTIONS': '--max-old-space-size=4096'
+                        'CLAUDE_CONFIG_DIR': '/root/.claude',
+                        'NODE_OPTIONS': '--max-old-space-size=4096',
+                        'HOME': '/home/node'
                     }
                 )
             else:
@@ -60,8 +60,9 @@ class ContainerRunner:
                     stdout=True,
                     stderr=True,
                     environment={
-                        'CLAUDE_CONFIG_DIR': '/home/node/.claude',
-                        'NODE_OPTIONS': '--max-old-space-size=4096'
+                        'CLAUDE_CONFIG_DIR': '/root/.claude',
+                        'NODE_OPTIONS': '--max-old-space-size=4096',
+                        'HOME': '/home/node'
                     }
                 )
                 print(result.decode('utf-8') if isinstance(result, bytes) else result)
@@ -110,8 +111,9 @@ class ContainerRunner:
             environment={
                 'CLAUDE_CODE_AVAILABLE': '1',
                 'CLAUDE_SESSION_ID': session_id,
-                'CLAUDE_CONFIG_DIR': '/home/node/.claude',
-                'NODE_OPTIONS': '--max-old-space-size=4096'
+                'CLAUDE_CONFIG_DIR': '/root/.claude',
+                'NODE_OPTIONS': '--max-old-space-size=4096',
+                'HOME': '/home/node'
             }
         )
         
@@ -124,20 +126,21 @@ class ContainerRunner:
     def _get_volumes(self) -> Dict[str, Dict[str, str]]:
         """Get volume mappings for the container."""
         volumes = {
-            str(self.project_root): {'bind': DEFAULT_WORKDIR, 'mode': 'rw'},
+            # Don't mount project directory - code is copied at build time
         }
         
         # Always mount Claude configuration (read-write so Claude can update trusted folders)
+        # Mount to /root since Claude Code has this hardcoded
         claude_config = Path.home() / '.claude.json'
         if claude_config.exists():
-            volumes[str(claude_config)] = {'bind': '/home/node/.claude.json', 'mode': 'rw'}
+            volumes[str(claude_config)] = {'bind': '/root/.claude.json', 'mode': 'rw'}
         else:
             print("Warning: ~/.claude.json not found. Claude Code may not have access to your settings.")
         
         # Mount Claude directory if it exists
         claude_dir = Path.home() / '.claude'
         if claude_dir.exists():
-            volumes[str(claude_dir)] = {'bind': '/home/node/.claude', 'mode': 'rw'}
+            volumes[str(claude_dir)] = {'bind': '/root/.claude', 'mode': 'rw'}
         
         # Mount SSH directory if it exists (for git operations)
         ssh_dir = Path.home() / '.ssh'
@@ -154,26 +157,7 @@ class ContainerRunner:
         if gitconfig.exists():
             volumes[str(gitconfig)] = {'bind': '/home/node/.gitconfig', 'mode': 'ro'}
         
-        # Mount host's npm global directory (includes Claude binary)
-        try:
-            result = subprocess.run(['npm', 'config', 'get', 'prefix'], 
-                                  capture_output=True, text=True, check=True)
-            npm_prefix = result.stdout.strip()
-            if npm_prefix and Path(npm_prefix).exists():
-                # Handle spaces in path with temporary symlink
-                if ' ' in npm_prefix:
-                    temp_link = Path('/tmp/npm-global-link')
-                    temp_link.unlink(missing_ok=True)
-                    temp_link.symlink_to(npm_prefix)
-                    volumes[str(temp_link)] = {'bind': '/host-npm-global', 'mode': 'ro'}
-                else:
-                    volumes[npm_prefix] = {'bind': '/host-npm-global', 'mode': 'ro'}
-            else:
-                print("Warning: npm prefix directory not found")
-        except subprocess.CalledProcessError:
-            print("Warning: npm not found or failed to get prefix path")
-        except Exception as e:
-            print(f"Warning: Failed to setup npm global mount: {e}")
+        # No need to mount npm global directory since Claude Code is installed in the container
         
         return volumes
     
@@ -191,7 +175,7 @@ class ContainerRunner:
         # Check if Docker image exists
         if not self.docker_client.image_exists(self.image_name):
             print(f"Error: Docker image '{self.image_name}' not found.")
-            print(f"Please run 'claude-container build' first to create the container image.")
+            print("Please run 'claude-container build' first to create the container image.")
             return None
         
         # Determine if this is a long-running command (claude) vs short command
@@ -210,9 +194,10 @@ class ContainerRunner:
                 name=f"claude-async-{session_id[:8]}",  # Use shorter ID for container name
                 environment={
                     'CLAUDE_SESSION_ID': session_id,
-                    'CLAUDE_CONFIG_DIR': '/home/node/.claude',
+                    'CLAUDE_CONFIG_DIR': '/root/.claude',
                     'CLAUDE_AUTO_APPROVE': 'true',  # Auto-approve permissions for async mode
-                    'NODE_OPTIONS': '--max-old-space-size=4096'
+                    'NODE_OPTIONS': '--max-old-space-size=4096',
+                    'HOME': '/home/node'
                 }
             )
             return container

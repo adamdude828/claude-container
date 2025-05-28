@@ -3,7 +3,7 @@
 import os
 import subprocess
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional
 
 from ..core.constants import CLAUDE_CODE_PATHS, PROJECT_PATTERNS
 

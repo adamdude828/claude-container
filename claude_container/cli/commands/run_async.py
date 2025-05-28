@@ -1,7 +1,6 @@
 """Run async command for Claude Container."""
 
 import click
-import json
 from pathlib import Path
 from datetime import datetime
 

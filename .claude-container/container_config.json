@@ -1,6 +1,14 @@
 {
-  "env_vars": {},
-  "runtime_versions": [],
+  "env_vars": {
+    "NODE_ENV": "development",
+    "CLAUDE_PERMISSIONS": "--dangerously-skip-permissions"
+  },
+  "runtime_versions": [
+    {
+      "name": "node",
+      "version": "20"
+    }
+  ],
   "custom_commands": [],
   "base_image": "node:20",
   "include_code": true,

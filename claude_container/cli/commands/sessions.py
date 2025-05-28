@@ -2,7 +2,6 @@
 
 import click
 from pathlib import Path
-from datetime import datetime
 
 from ...core.docker_client import DockerClient
 from ...utils.session_manager import SessionManager

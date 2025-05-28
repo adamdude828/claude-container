@@ -36,9 +36,9 @@ def auth_check():
     
     # Prepare volume mounts
     volumes = {
-        str(project_root): {"bind": "/home/node/project", "mode": "rw"},
-        str(Path.home() / ".claude"): {"bind": "/home/node/.claude", "mode": "rw"},
-        str(Path.home() / ".config/claude"): {"bind": "/home/node/.config/claude", "mode": "rw"}
+        str(project_root): {"bind": "/workspace", "mode": "rw"},
+        str(Path.home() / ".claude"): {"bind": "/root/.claude", "mode": "rw"},
+        str(Path.home() / ".config/claude"): {"bind": "/root/.config/claude", "mode": "rw"}
     }
     
     try:
@@ -47,9 +47,9 @@ def auth_check():
             image_name,
             command=["claude", "--model=sonnet", "-p", "Auth check - return immediately"],
             volumes=volumes,
-            working_dir="/home/node/project",
+            working_dir="/workspace",
             environment={
-                'CLAUDE_CONFIG_DIR': '/home/node/.claude',
+                'CLAUDE_CONFIG_DIR': '/root/.claude',
                 'NODE_OPTIONS': '--max-old-space-size=4096'
             },
             detach=True,  # Run detached to get exit code

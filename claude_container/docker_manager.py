@@ -297,7 +297,7 @@ Output ONLY the final working Dockerfile content after testing, no explanations 
                     'type': 'claude-generated',
                     'generated_at': datetime.now().isoformat()
                 })
-            except Exception as e:
+            except Exception:
                 # Log error but keep Dockerfile for debugging
                 print(f"Build failed. Dockerfile saved at: {temp_dockerfile}")
                 raise

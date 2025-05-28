@@ -62,7 +62,7 @@ def start(continue_session):
     # Check if Docker image exists before prompting for task
     if not docker_client.image_exists(image_name):
         click.echo(f"Error: Docker image '{image_name}' not found.")
-        click.echo(f"Please run 'claude-container build' first to create the container image.")
+        click.echo("Please run 'claude-container build' first to create the container image.")
         return
     
     runner = ContainerRunner(project_root, data_dir, image_name)

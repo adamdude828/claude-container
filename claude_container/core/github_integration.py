@@ -1,9 +1,8 @@
 """GitHub integration for Claude Container."""
 
 import subprocess
-import json
 import os
-from typing import Optional, Dict, Tuple
+from typing import Optional, Tuple
 from pathlib import Path
 
 

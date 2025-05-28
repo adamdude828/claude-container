@@ -7,7 +7,7 @@ def get_claude_wrapper_script() -> str:
 # Claude wrapper script for git operations
 
 # Ensure PATH includes claude command location
-export PATH="/home/node/.local/bin:$PATH"
+export PATH="/root/.local/bin:$PATH"
 
 BRANCH_NAME=$1
 shift  # Remove branch name from arguments

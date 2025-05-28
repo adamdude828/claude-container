@@ -1,8 +1,6 @@
 """Docker image building functionality."""
 
-import shutil
 from pathlib import Path
-from typing import Optional
 
 from .docker_client import DockerClient
 from .dockerfile_generator import DockerfileGenerator
@@ -61,7 +59,7 @@ class ImageBuilder:
             
             return self.image_name
             
-        except Exception as e:
+        except Exception:
             print(f"Build failed. Dockerfile saved at: {temp_dockerfile}")
             raise
         finally:

@@ -1,7 +1,7 @@
 """Configuration models for Claude Container."""
 
 from dataclasses import dataclass
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 
 
 @dataclass

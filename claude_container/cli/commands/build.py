@@ -11,10 +11,11 @@ from ...core.constants import DATA_DIR_NAME, CONTAINER_PREFIX
 
 
 @click.command()
-@click.option('--force-rebuild', is_flag=True, help='Force rebuild of container image')
+@click.option('--force-rebuild', is_flag=True, help='Force rebuild of container image even if it exists')
+@click.option('--no-cache', is_flag=True, help='Build without using Docker cache (rebuilds all layers)')
 @click.option('--tag', help='Tag for the container image')
 @click.option('--claude-code-path', envvar='CLAUDE_CODE_PATH', help='Path to Claude Code executable')
-def build(force_rebuild, tag, claude_code_path):
+def build(force_rebuild, no_cache, tag, claude_code_path):
     """Build Docker container with project code included"""
     project_root = Path.cwd()
     data_dir = project_root / DATA_DIR_NAME
@@ -35,11 +36,6 @@ def build(force_rebuild, tag, claude_code_path):
     if not force_rebuild and docker_client.image_exists(tag):
         click.echo(f"Image {tag} already exists. Use --force-rebuild to rebuild.")
         return
-    
-    # Remove existing image if force rebuild
-    if force_rebuild and docker_client.image_exists(tag):
-        click.echo(f"Removing existing image {tag}...")
-        docker_client.remove_image(tag)
     
     click.echo(f"Building container for project: {project_root}")
     
@@ -75,13 +71,21 @@ def build(force_rebuild, tag, claude_code_path):
         # Write Dockerfile
         temp_dockerfile.write_text(dockerfile_content)
         
+        # Show build status messages
+        if force_rebuild and no_cache:
+            click.echo("Force rebuild enabled - rebuilding without Docker cache...")
+        elif force_rebuild:
+            click.echo("Force rebuild enabled - rebuilding image...")
+        elif no_cache:
+            click.echo("Building without cache - all layers will be rebuilt...")
+        
         # Build image
         docker_client.build_image(
             path=str(project_root),
             dockerfile=str(temp_dockerfile),
             tag=tag,
             rm=True,
-            nocache=force_rebuild
+            nocache=no_cache
         )
         
         click.echo(f"Container image built: {tag}")

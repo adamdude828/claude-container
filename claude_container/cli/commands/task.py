@@ -2,8 +2,6 @@
 
 import click
 import subprocess
-import sys
-from pathlib import Path
 
 from ...core.daemon_client import DaemonClient
 

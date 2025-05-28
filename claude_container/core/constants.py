@@ -1,6 +1,5 @@
 """Constants used throughout the Claude Container application."""
 
-from pathlib import Path
 
 # Docker-related constants
 DEFAULT_WORKDIR = "/workspace"

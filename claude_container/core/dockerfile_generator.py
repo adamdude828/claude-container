@@ -1,7 +1,6 @@
 """Dockerfile generation logic."""
 
 from pathlib import Path
-from typing import Optional
 
 from .dockerfile_template import generate_dockerfile
 from ..models.container import ContainerConfig

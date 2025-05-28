@@ -1,5 +1,4 @@
 import click
-import os
 from pathlib import Path
 from .docker_manager import DockerManager
 
@@ -41,7 +40,7 @@ def build(dockerfile, force_rebuild, claude_code_path):
         default_dockerfile = project_root / 'Dockerfile'
         if default_dockerfile.exists():
             existing_dockerfile = str(default_dockerfile)
-            click.echo(f"Found existing Dockerfile - will enhance it with Claude Code")
+            click.echo("Found existing Dockerfile - will enhance it with Claude Code")
     elif dockerfile and Path(dockerfile).exists():
         existing_dockerfile = dockerfile
         click.echo(f"Using {dockerfile} as reference")

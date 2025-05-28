@@ -3,7 +3,7 @@
 import json
 import shutil
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional
 
 from ..models.config import ClaudeConfig, ToolPermissions
 from ..core.constants import DOCKER_PERMISSIONS
