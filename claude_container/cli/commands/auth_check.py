@@ -1,60 +1,62 @@
 import click
 import sys
 from pathlib import Path
-from claude_container.core.docker_client import DockerClient
+from claude_container.core.container_runner import ContainerRunner
 from claude_container.core.constants import CONTAINER_PREFIX, DATA_DIR_NAME
 
 
-@click.command()
-def auth_check():
+def check_claude_auth(quiet=False):
     """Check if Claude authentication is still valid.
     
-    Starts a new container to verify global Claude authentication status.
+    Args:
+        quiet: If True, only show errors
+        
+    Returns:
+        bool: True if authentication is valid, False otherwise
     """
     project_root = Path.cwd()
     data_dir = project_root / DATA_DIR_NAME
     
     if not data_dir.exists():
-        click.echo("No container found. Please run 'claude-container build' first.", err=True)
-        sys.exit(1)
-    
-    try:
-        docker_client = DockerClient()
-    except RuntimeError as e:
-        click.echo(f"Error: {e}", err=True)
-        sys.exit(1)
+        if not quiet:
+            click.echo("No container found. Please run 'claude-container build' first.", err=True)
+        return False
     
     image_name = f"{CONTAINER_PREFIX}-{project_root.name}".lower()
     
+    # Create container runner with unified config
+    try:
+        runner = ContainerRunner(project_root, data_dir, image_name)
+    except RuntimeError as e:
+        if not quiet:
+            click.echo(f"Error: {e}", err=True)
+        return False
+    
     # Check if image exists
-    if not docker_client.image_exists(image_name):
-        click.echo(f"Container image '{image_name}' not found.", err=True)
-        click.echo("Please run 'claude-container build' first.")
-        sys.exit(1)
+    if not runner.docker_client.image_exists(image_name):
+        if not quiet:
+            click.echo(f"Container image '{image_name}' not found.", err=True)
+            click.echo("Please run 'claude-container build' first.")
+        return False
     
-    click.echo("Checking Claude authentication...")
-    
-    # Prepare volume mounts
-    volumes = {
-        str(project_root): {"bind": "/workspace", "mode": "rw"},
-        str(Path.home() / ".claude"): {"bind": "/root/.claude", "mode": "rw"},
-        str(Path.home() / ".config/claude"): {"bind": "/root/.config/claude", "mode": "rw"}
-    }
+    if not quiet:
+        click.echo("Checking Claude authentication...")
     
     try:
-        # Run container with auth check command - need to handle output properly
-        container = docker_client.client.containers.run(
-            image_name,
+        # Use unified container config for auth check
+        config = runner._get_container_config(
             command=["claude", "--model=sonnet", "-p", "Auth check - return immediately"],
-            volumes=volumes,
-            working_dir="/workspace",
-            environment={
-                'CLAUDE_CONFIG_DIR': '/root/.claude',
-                'NODE_OPTIONS': '--max-old-space-size=4096'
-            },
-            detach=True,  # Run detached to get exit code
-            labels={"claude-container": "true", "claude-container-type": "auth-check"}
+            tty=False,
+            stdin_open=False,
+            detach=True,
+            remove=False  # We'll remove it manually after getting exit code
         )
+        
+        # Add labels for tracking
+        config['labels'] = {"claude-container": "true", "claude-container-type": "auth-check"}
+        
+        # Run container
+        container = runner.docker_client.client.containers.run(**config)
         
         # Wait for container to complete and get exit code
         result = container.wait()
@@ -64,12 +66,26 @@ def auth_check():
         container.remove()
         
         if exit_code == 0:
-            click.echo("✓ Authentication is valid")
+            if not quiet:
+                click.echo("✓ Authentication is valid")
+            return True
         else:
-            click.echo("✗ Authentication has expired or is invalid", err=True)
-            click.echo("Run 'claude-container login' to re-authenticate")
-            sys.exit(1)
+            if not quiet:
+                click.echo("✗ Authentication has expired or is invalid", err=True)
+                click.echo("Run 'claude-container login' to re-authenticate")
+            return False
             
     except Exception as e:
-        click.echo(f"Error checking authentication: {e}", err=True)
+        if not quiet:
+            click.echo(f"Error checking authentication: {e}", err=True)
+        return False
+
+
+@click.command()
+def auth_check():
+    """Check if Claude authentication is still valid.
+    
+    Starts a new container to verify global Claude authentication status.
+    """
+    if not check_claude_auth():
         sys.exit(1)
