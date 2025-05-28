@@ -7,15 +7,11 @@ from claude_container.core.container_runner import ContainerRunner
 class TestContainerRunner:
     """Smoke tests for ContainerRunner functionality."""
     
-    @patch('claude_container.core.container_runner.SessionManager')
     @patch('claude_container.core.container_runner.DockerClient')
-    def test_container_runner_initialization(self, mock_docker_client_class, mock_session_manager_class, temp_project_dir):
+    def test_container_runner_initialization(self, mock_docker_client_class, temp_project_dir):
         """Test that ContainerRunner initializes correctly."""
         mock_docker = MagicMock()
         mock_docker_client_class.return_value = mock_docker
-        
-        mock_session_manager = MagicMock()
-        mock_session_manager_class.return_value = mock_session_manager
         
         data_dir = temp_project_dir / ".claude-container"
         runner = ContainerRunner(temp_project_dir, data_dir, "test-image")
@@ -24,11 +20,9 @@ class TestContainerRunner:
         assert runner.data_dir == data_dir
         assert runner.image_name == "test-image"
         assert runner.docker_client == mock_docker
-        assert runner.session_manager == mock_session_manager
     
-    @patch('claude_container.core.container_runner.SessionManager')
     @patch('claude_container.core.container_runner.DockerClient')
-    def test_run_command_image_not_exists(self, mock_docker_client_class, mock_session_manager_class, temp_project_dir, capsys):
+    def test_run_command_image_not_exists(self, mock_docker_client_class, temp_project_dir, capsys):
         """Test running command when image doesn't exist."""
         mock_docker = MagicMock()
         mock_docker.image_exists.return_value = False
@@ -42,9 +36,8 @@ class TestContainerRunner:
         assert "Docker image 'test-image' not found" in captured.out
         assert "Please run 'claude-container build' first" in captured.out
     
-    @patch('claude_container.core.container_runner.SessionManager')
     @patch('claude_container.core.container_runner.DockerClient')
-    def test_run_command_success(self, mock_docker_client_class, mock_session_manager_class, temp_project_dir):
+    def test_run_command_success(self, mock_docker_client_class, temp_project_dir):
         """Test successful command run."""
         # Setup mocks
         mock_docker = MagicMock()
@@ -53,9 +46,6 @@ class TestContainerRunner:
         mock_container.decode.return_value = "Hello from container"
         mock_docker.client.containers.run.return_value = b"Hello from container"
         mock_docker_client_class.return_value = mock_docker
-        
-        mock_session_manager = MagicMock()
-        mock_session_manager_class.return_value = mock_session_manager
         
         # Test
         data_dir = temp_project_dir / ".claude-container"
@@ -68,28 +58,39 @@ class TestContainerRunner:
         assert call_kwargs['working_dir'] == '/workspace'
         assert call_kwargs['remove'] is True
     
-    @patch('claude_container.core.container_runner.SessionManager')
+    
     @patch('claude_container.core.container_runner.DockerClient')
-    def test_start_task(self, mock_docker_client_class, mock_session_manager_class, temp_project_dir):
-        """Test starting a Claude task."""
+    def test_create_persistent_container(self, mock_docker_client_class, temp_project_dir):
+        """Test creating a persistent container for tasks."""
         # Setup mocks
         mock_docker = MagicMock()
-        mock_docker.image_exists.return_value = True
+        mock_container = MagicMock()
+        mock_docker.client.containers.run.return_value = mock_container
         mock_docker_client_class.return_value = mock_docker
-        
-        mock_session = MagicMock()
-        mock_session.session_id = "session-123"
-        mock_session_manager = MagicMock()
-        mock_session_manager.create_session.return_value = mock_session
-        mock_session_manager_class.return_value = mock_session_manager
         
         # Test
         data_dir = temp_project_dir / ".claude-container"
         runner = ContainerRunner(temp_project_dir, data_dir, "test-image")
-        runner.start_task("Fix the bug in main.py")
+        result = runner.create_persistent_container("task")
         
         # Verify
-        mock_session_manager.create_session.assert_called_once()
-        call_args = mock_session_manager.create_session.call_args
-        assert call_args[1]['name'] == "Fix the bug in main.py"
-        assert call_args[1]['command'] == ['claude', 'Fix the bug in main.py']
+        assert result == mock_container
+        mock_docker.client.containers.run.assert_called_once()
+        
+        # Check configuration
+        call_kwargs = mock_docker.client.containers.run.call_args[1]
+        assert call_kwargs['command'] == "sleep infinity"
+        assert call_kwargs['detach'] is True
+        assert call_kwargs['remove'] is False  # Should not auto-remove
+        assert call_kwargs['working_dir'] == '/workspace'
+        assert 'claude-task' in call_kwargs['name']
+        assert call_kwargs['labels'] == {
+            "claude-container": "true",
+            "claude-container-type": "task"
+        }
+        
+        # Check environment variables
+        env = call_kwargs['environment']
+        assert env['CLAUDE_CONFIG_DIR'] == '/home/node/.claude'
+        assert env['HOME'] == '/home/node'
+        assert env['NODE_OPTIONS'] == '--max-old-space-size=4096'

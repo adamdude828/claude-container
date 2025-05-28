@@ -30,6 +30,6 @@ class TestMainCLI:
         result = cli_runner.invoke(cli, ['--help'])
         
         # Check for main commands
-        expected_commands = ['build', 'run', 'clean', 'config', 'daemon', 'queue']
+        expected_commands = ['build', 'run', 'clean', 'config', 'login', 'auth-check', 'task']
         for cmd in expected_commands:
             assert cmd in result.output

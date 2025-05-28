@@ -71,6 +71,11 @@ def build(force_rebuild, no_cache, tag, claude_code_path):
         # Write Dockerfile
         temp_dockerfile.write_text(dockerfile_content)
         
+        # Handle force rebuild by removing existing image
+        if force_rebuild and docker_client.image_exists(tag):
+            click.echo("Removing existing image...")
+            docker_client.remove_image(tag)
+        
         # Show build status messages
         if force_rebuild and no_cache:
             click.echo("Force rebuild enabled - rebuilding without Docker cache...")

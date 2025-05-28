@@ -32,9 +32,15 @@ RUN npm install -g @anthropic-ai/claude-code
 # Copy project code (always included)
 COPY --chown=node:node . /workspace
 
-# Configure git safe directory and reset to clean state
+# Configure git safe directory for root
 USER root
 RUN git config --global --add safe.directory /workspace && \
+    git config --global --add safe.directory '*'
+
+# Switch to node user for git operations and configuration
+USER node
+RUN git config --global --add safe.directory /workspace && \
+    git config --global --add safe.directory '*' && \
     cd /workspace && \
     if [ -d .git ]; then \
         echo "Cleaning git repository state..." && \
@@ -49,16 +55,13 @@ RUN git config --global --add safe.directory /workspace && \
         fi; \
     fi
 
-# Switch back to node user and configure git for node user too
-USER node
-RUN git config --global --add safe.directory /workspace
-
 # Set working directory
 WORKDIR /workspace
 
 # Default command - bash for interactive sessions
 CMD ["/bin/bash"]
 """
+
 
 # Legacy templates for backward compatibility
 CODEX_UNIVERSAL_DOCKERFILE = NODE_DOCKERFILE

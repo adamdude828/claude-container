@@ -26,7 +26,6 @@ class DockerManager:
             else:
                 raise RuntimeError(f"Failed to connect to Docker: {e}") from e
         self.config_file = data_dir / 'container_config.json'
-        self.sessions_file = data_dir / 'sessions.json'
         self.image_name = f"claude-container-{project_root.name}".lower()
     
     
@@ -352,34 +351,6 @@ Output ONLY the final working Dockerfile content after testing, no explanations 
             return None
         return json.loads(self.config_file.read_text())
     
-    def _save_session(self, session_id: str, task: str):
-        """Save a new session"""
-        sessions = self._load_sessions()
-        sessions.append({
-            'id': session_id,
-            'task': task,
-            'created_at': datetime.now().isoformat(),
-            'completed': False
-        })
-        self.sessions_file.write_text(json.dumps(sessions, indent=2))
-    
-    def _load_sessions(self) -> List[Dict[str, Any]]:
-        """Load all sessions"""
-        if not self.sessions_file.exists():
-            return []
-        return json.loads(self.sessions_file.read_text())
-    
-    def _get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
-        """Get a specific session"""
-        sessions = self._load_sessions()
-        for session in sessions:
-            if session['id'] == session_id:
-                return session
-        return None
-    
-    def list_sessions(self) -> List[Dict[str, Any]]:
-        """List all sessions for the project"""
-        return self._load_sessions()
     
     def check_git_ssh_origin(self) -> bool:
         """Check if Git remote origin uses SSH"""
@@ -397,70 +368,3 @@ Output ONLY the final working Dockerfile content after testing, no explanations 
         except:
             return True  # If git check fails, allow to proceed
     
-    def start_task(self, task_description: str = None, continue_session: str = None):
-        """Start a new Claude Code task or continue an existing session"""
-        # Mount directories
-        volumes = {
-            str(self.project_root): {'bind': '/workspace', 'mode': 'rw'},
-            str(Path.home() / '.ssh'): {'bind': '/root/.ssh', 'mode': 'ro'},
-        }
-        
-        # Mount Claude configuration if it exists
-        claude_config = Path.home() / '.claude.json'
-        if claude_config.exists():
-            volumes[str(claude_config)] = {'bind': '/root/.claude.json', 'mode': 'ro'}
-        
-        # Mount GitHub CLI config if it exists
-        gh_config_dir = Path.home() / '.config' / 'gh'
-        if gh_config_dir.exists():
-            volumes[str(gh_config_dir)] = {'bind': '/root/.config/gh', 'mode': 'ro'}
-        
-        # Load or create session
-        session_id = continue_session
-        if continue_session:
-            session = self._get_session(continue_session)
-            if not session:
-                raise ValueError(f"Session {continue_session} not found")
-            task_description = session['task']
-        else:
-            session_id = str(uuid.uuid4())
-            self._save_session(session_id, task_description)
-        
-        # Prepare Claude command
-        claude_cmd = ['claude']
-        if continue_session:
-            claude_cmd.extend(['--resume', session_id])
-        if task_description:
-            claude_cmd.append(task_description)
-        
-        # Run container
-        container = self.client.containers.run(
-            self.image_name,
-            ' '.join(claude_cmd),
-            volumes=volumes,
-            working_dir='/workspace',
-            tty=True,
-            stdin_open=True,
-            detach=True,
-            environment={
-                'CLAUDE_CODE_AVAILABLE': '1',
-                'CLAUDE_SESSION_ID': session_id
-            }
-        )
-        
-        # Attach to container
-        try:
-            for line in container.attach(stream=True, logs=True):
-                print(line.decode('utf-8'), end='')
-        except KeyboardInterrupt:
-            pass
-        finally:
-            container.stop()
-            container.remove()
-            
-            # Mark session as completed
-            sessions = self._load_sessions()
-            for session in sessions:
-                if session['id'] == session_id:
-                    session['completed'] = True
-            self.sessions_file.write_text(json.dumps(sessions, indent=2))

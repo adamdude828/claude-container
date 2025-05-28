@@ -6,8 +6,6 @@ from .commands.build import build
 from .commands.run import run
 from .commands.clean import clean
 from .commands.config import config
-from .commands.daemon import daemon
-from .commands.queue import queue
 from .commands.login import login
 from .commands.auth_check import auth_check
 from .commands.task import task
@@ -24,8 +22,6 @@ cli.add_command(build)
 cli.add_command(run)
 cli.add_command(clean)
 cli.add_command(config)
-cli.add_command(daemon)
-cli.add_command(queue)
 cli.add_command(login)
 cli.add_command(auth_check)
 cli.add_command(task)

@@ -6,7 +6,6 @@ import subprocess
 import docker.errors
 
 from .docker_client import DockerClient
-from ..utils.session_manager import SessionManager
 from ..core.constants import DEFAULT_WORKDIR
 
 
@@ -19,20 +18,14 @@ class ContainerRunner:
         self.data_dir = data_dir
         self.image_name = image_name
         self.docker_client = DockerClient()
-        self.session_manager = SessionManager(data_dir)
     
-    def _get_container_environment(self, session_id: Optional[str] = None, 
-                                   auto_approve: bool = False) -> Dict[str, str]:
+    def _get_container_environment(self, auto_approve: bool = False) -> Dict[str, str]:
         """Get standard environment variables for container."""
         env = {
             'CLAUDE_CONFIG_DIR': '/home/node/.claude',
             'NODE_OPTIONS': '--max-old-space-size=4096',
             'HOME': '/home/node'
         }
-        
-        if session_id:
-            env['CLAUDE_SESSION_ID'] = session_id
-            env['CLAUDE_CODE_AVAILABLE'] = '1'
             
         if auto_approve:
             env['CLAUDE_AUTO_APPROVE'] = 'true'
@@ -41,14 +34,14 @@ class ContainerRunner:
     
     def _get_container_config(self, command=None, tty=True, stdin_open=True, 
                               detach=False, remove=True, stdout=False, stderr=False,
-                              session_id: Optional[str] = None, auto_approve: bool = False,
+                              auto_approve: bool = False,
                               name: Optional[str] = None) -> Dict:
         """Get unified container configuration."""
         config = {
             'image': self.image_name,
             'volumes': self._get_volumes(),
             'working_dir': DEFAULT_WORKDIR,
-            'environment': self._get_container_environment(session_id, auto_approve),
+            'environment': self._get_container_environment(auto_approve),
             'tty': tty,
             'stdin_open': stdin_open,
             'detach': detach,
@@ -184,40 +177,6 @@ class ContainerRunner:
         except Exception as e:
             print(f"Error running container: {e}")
     
-    def start_task(self, task_description: Optional[str] = None, 
-                   continue_session: Optional[str] = None):
-        """Start a new Claude Code task or continue an existing session."""
-        
-        # Handle session
-        if continue_session:
-            session = self.session_manager.get_session(continue_session)
-            if not session:
-                raise ValueError(f"Session {continue_session} not found")
-            task_description = session.name
-            session_id = session.session_id
-        else:
-            # Create session with task description as name and claude command
-            claude_command = ['claude']
-            if task_description:
-                claude_command.append(task_description)
-            session = self.session_manager.create_session(
-                name=task_description or "Interactive Claude session",
-                command=claude_command
-            )
-            session_id = session.session_id
-        
-        # Prepare Claude command
-        claude_cmd = ['claude']
-        if continue_session:
-            claude_cmd.extend(['--resume', session_id])
-        if task_description:
-            claude_cmd.append(task_description)
-        
-        # For interactive Claude tasks, use subprocess
-        self._run_interactive_container(claude_cmd, session_id=session_id)
-        
-        # Mark session as completed
-        self.session_manager.mark_completed(session_id)
     
     def _get_volumes(self) -> Dict[str, Dict[str, str]]:
         """Get volume mappings for the container."""
@@ -251,53 +210,12 @@ class ContainerRunner:
         if gh_config_dir.exists():
             volumes[str(gh_config_dir)] = {'bind': '/home/node/.config/gh', 'mode': 'ro'}
         
-        # Mount git config if it exists
-        gitconfig = Path.home() / '.gitconfig'
-        if gitconfig.exists():
-            volumes[str(gitconfig)] = {'bind': '/home/node/.gitconfig', 'mode': 'ro'}
-        
         # No need to mount npm global directory since Claude Code is installed in the container
         
         return volumes
     
-    def run_async(self, command: List[str], session_id: str):
-        """Run a command asynchronously in the background."""
-        
-        # Handle empty command - don't default to bash for async runs
-        if not command:
-            print("Error: No command provided for async run")
-            return None
-            
-        cmd = ' '.join(command)
-        
-        # Check if Docker image exists
-        if not self.docker_client.image_exists(self.image_name):
-            print(f"Error: Docker image '{self.image_name}' not found.")
-            print("Please run 'claude-container build' first to create the container image.")
-            return None
-        
-        # Determine if this is a long-running command (claude) vs short command
-        is_claude_command = command and command[0] == 'claude'
-        
-        try:
-            # Run container in detached mode with unified config
-            config = self._get_container_config(
-                command=cmd,
-                tty=is_claude_command,  # Only use tty for interactive claude commands
-                stdin_open=is_claude_command,  # Only keep stdin open for claude commands
-                detach=True,
-                remove=False,  # Don't auto-remove async containers
-                session_id=session_id,
-                auto_approve=True,  # Auto-approve permissions for async mode
-                name=f"claude-async-{session_id[:8]}"  # Use shorter ID for container name
-            )
-            container = self.docker_client.client.containers.run(**config)
-            return container
-        except Exception as e:
-            print(f"Error starting async container: {e}")
-            return None
     
-    def _run_interactive_container(self, cmd, session_id: Optional[str] = None):
+    def _run_interactive_container(self, cmd):
         """Run an interactive container using subprocess for proper TTY handling."""
         # Build docker run command
         docker_cmd = [
@@ -308,7 +226,7 @@ class ContainerRunner:
         ]
         
         # Add environment variables
-        env = self._get_container_environment(session_id=session_id)
+        env = self._get_container_environment()
         for key, value in env.items():
             docker_cmd.extend(['-e', f'{key}={value}'])
         
@@ -336,3 +254,21 @@ class ContainerRunner:
         finally:
             container.stop()
             container.remove()
+    
+    def create_persistent_container(self, name_suffix: str = "task"):
+        """Create a persistent container for multi-step operations."""
+        config = self._get_container_config(
+            command="sleep infinity",  # Keep container running
+            tty=False,
+            stdin_open=False,
+            detach=True,
+            remove=False,  # Don't auto-remove
+            name=f"claude-{name_suffix}-{self.project_root.name}".lower()
+        )
+        config['labels'] = {"claude-container": "true", "claude-container-type": name_suffix}
+        
+        try:
+            container = self.docker_client.client.containers.run(**config)
+            return container
+        except Exception as e:
+            raise RuntimeError(f"Failed to create container: {e}")
