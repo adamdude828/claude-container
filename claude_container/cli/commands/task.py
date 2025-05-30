@@ -3,11 +3,78 @@
 import click
 import subprocess
 import sys
+import tempfile
+import os
 from pathlib import Path
 
 from ...core.container_runner import ContainerRunner
 from ...core.constants import CONTAINER_PREFIX, DATA_DIR_NAME, DEFAULT_WORKDIR, LIBERAL_SETTINGS_JSON
 from ..commands.auth_check import check_claude_auth
+
+
+def get_description_from_editor():
+    """Open editor for user to write task description with fallback."""
+    # Template for task description
+    template = """# Task Description
+# Please describe the task you want Claude to complete.
+# Lines starting with '#' will be removed.
+# 
+# Consider including:
+# - What feature or bug fix is needed
+# - Any specific requirements or constraints
+# - Expected outcome or success criteria
+#
+# Example:
+# Implement a user authentication system with email/password login,
+# including registration, login, and logout endpoints. Use JWT tokens
+# for session management.
+
+"""
+    
+    # Get editor from environment or default to vim
+    editor = os.environ.get('EDITOR', 'vim')
+    
+    # Create temporary file
+    fd, temp_path = tempfile.mkstemp(suffix='.md', text=True)
+    try:
+        # Write template to temp file
+        with os.fdopen(fd, 'w') as f:
+            f.write(template)
+        
+        # Open editor - use subprocess.run for better error handling
+        try:
+            result = subprocess.run([editor, temp_path], check=False)
+            
+            if result.returncode != 0:
+                return None
+        except FileNotFoundError:
+            click.echo(f"Error: Editor '{editor}' not found. Falling back to prompt.")
+            return None
+        except Exception as e:
+            click.echo(f"Error opening editor: {e}. Falling back to prompt.")
+            return None
+        
+        # Read contents
+        with open(temp_path, 'r') as f:
+            content = f.read()
+        
+        # Remove comment lines and clean up
+        lines = [line for line in content.split('\n') if not line.strip().startswith('#')]
+        description = '\n'.join(lines).strip()
+        
+        # Check if description is empty after removing comments
+        if not description:
+            click.echo("Description is empty. Falling back to prompt.")
+            return None
+            
+        return description
+    except Exception as e:
+        click.echo(f"Error: {e}. Falling back to prompt.")
+        return None
+    finally:
+        # Clean up temp file if it still exists
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
 
 
 @click.group()
@@ -97,7 +164,14 @@ def start():
     click.echo("=" * 60 + "\n")
     
     branch_name = click.prompt("Branch name")
-    task_description = click.prompt("Task description")
+    
+    # Try to get description from editor first
+    click.echo("\nOpening editor for task description...")
+    task_description = get_description_from_editor()
+    
+    if task_description is None:
+        # Fall back to simple prompt
+        task_description = click.prompt("Task description")
     
     # Validate user inputs
     if not branch_name or branch_name.isspace():
