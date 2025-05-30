@@ -141,33 +141,37 @@ def start():
             )
         
         # Step 1: Git branch setup
-        click.echo(f"\n🌿 Setting up branch '{branch_name}'...")
+        click.echo(f"\n🌿 Creating feature branch '{branch_name}'...")
         
-        # Attempt to create new branch
+        # First ensure we're on main/master
+        main_branch_result = container.exec_run(
+            "git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@'",
+            workdir=DEFAULT_WORKDIR
+        )
+        main_branch = main_branch_result.output.decode().strip() or "main"
+        
+        # Checkout main and pull latest
+        click.echo(f"📥 Syncing with {main_branch}...")
+        container.exec_run(
+            f"git checkout {main_branch}",
+            workdir=DEFAULT_WORKDIR
+        )
+        container.exec_run(
+            "git pull",
+            workdir=DEFAULT_WORKDIR
+        )
+        
+        # Create new feature branch
         checkout_result = container.exec_run(
             f"git checkout -b {branch_name}",
             workdir=DEFAULT_WORKDIR
         )
         
         if checkout_result.exit_code != 0:
-            # Branch exists - switch to it
-            checkout_result = container.exec_run(
-                f"git checkout {branch_name}",
-                workdir=DEFAULT_WORKDIR
-            )
-            
-            if checkout_result.exit_code != 0:
-                click.echo(f"\n❌ Error: Failed to checkout branch\n{checkout_result.output.decode()}", err=True)
-                raise Exception("Failed to checkout branch")
+            click.echo(f"\n❌ Error: Failed to create branch\n{checkout_result.output.decode()}", err=True)
+            raise Exception("Failed to create branch")
         
-        # Sync with remote
-        click.echo("📥 Pulling latest changes...")
-        container.exec_run(
-            "git pull",
-            workdir=DEFAULT_WORKDIR
-        )
-        
-        # Step 2: Execute Claude task
+        # Step 2: Execute Claude task (First Run - Task Implementation)
         click.echo(f"\n🤖 Running Claude with task:\n   {task_description}")
         click.echo("\n" + "-" * 60)
         click.echo("Claude is working on your task...")
@@ -184,32 +188,49 @@ def start():
         for chunk in claude_result.output:
             click.echo(chunk.decode(), nl=False)
         
-        # Step 3: Commit changes
-        click.echo("\n\n💾 Committing changes...")
+        # Step 3: Get changes summary and have Claude commit (Second Run)
+        click.echo("\n\n📊 Analyzing changes...")
         
-        # Stage all changes
-        add_result = container.exec_run(
-            "git add -A",
+        # Get git status and diff for Claude to understand changes
+        status_result = container.exec_run(
+            "git status --porcelain",
             workdir=DEFAULT_WORKDIR
         )
         
-        if add_result.exit_code != 0:
-            click.echo(f"⚠️  Warning: Failed to stage changes: {add_result.output.decode()}")
-        
-        # Create commit with descriptive message
-        commit_message = f"Task: {task_description}\n\nAutomated commit from claude-container task"
-        commit_result = container.exec_run(
-            ["git", "commit", "-m", commit_message],
+        diff_result = container.exec_run(
+            "git diff --stat",
             workdir=DEFAULT_WORKDIR
         )
         
-        if commit_result.exit_code != 0:
-            if b"nothing to commit" in commit_result.output:
-                click.echo("ℹ️  No changes to commit")
-            else:
-                click.echo(f"❌ Error: Commit failed\n{commit_result.output.decode()}", err=True)
+        # Check if there are any changes
+        if not status_result.output.strip():
+            click.echo("ℹ️  No changes detected. Task may have been informational only.")
         else:
-            click.echo("✅ Changes committed successfully")
+            # Prepare commit prompt for Claude
+            commit_prompt = f"""You just completed this task: {task_description}
+
+Here are the changes you made:
+{diff_result.output.decode()}
+
+Please create a git commit with these changes. Use 'git add' and 'git commit' commands.
+Write a clear, concise commit message that describes what was accomplished.
+Do NOT push the changes."""
+            
+            click.echo("\n💾 Having Claude commit the changes...")
+            click.echo("-" * 60 + "\n")
+            
+            # Execute Claude to handle the commit
+            commit_result = container.exec_run(
+                ["claude", "--model=sonnet", "-p", commit_prompt],
+                workdir=DEFAULT_WORKDIR,
+                stream=True
+            )
+            
+            # Stream Claude's commit output
+            for chunk in commit_result.output:
+                click.echo(chunk.decode(), nl=False)
+            
+            click.echo("\n" + "-" * 60)
         
         # Push to remote repository
         click.echo(f"\n📤 Pushing branch '{branch_name}' to remote...")
