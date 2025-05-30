@@ -184,75 +184,98 @@ def start():
         for chunk in claude_result.output:
             click.echo(chunk.decode(), nl=False)
         
-        # Step 3: Commit changes
-        click.echo("\n\n💾 Committing changes...")
+        # Step 3: Have Claude commit the changes
+        click.echo("\n\n💾 Having Claude commit the changes...")
         
-        # Stage all changes
-        add_result = container.exec_run(
-            "git add -A",
+        # Check if there are changes to commit
+        status_result = container.exec_run(
+            "git status --porcelain",
             workdir=DEFAULT_WORKDIR
         )
         
-        if add_result.exit_code != 0:
-            click.echo(f"⚠️  Warning: Failed to stage changes: {add_result.output.decode()}")
-        
-        # Create commit with descriptive message
-        commit_message = f"Task: {task_description}\n\nAutomated commit from claude-container task"
-        commit_result = container.exec_run(
-            ["git", "commit", "-m", commit_message],
-            workdir=DEFAULT_WORKDIR
-        )
-        
-        if commit_result.exit_code != 0:
-            if b"nothing to commit" in commit_result.output:
-                click.echo("ℹ️  No changes to commit")
-            else:
-                click.echo(f"❌ Error: Commit failed\n{commit_result.output.decode()}", err=True)
+        if not status_result.output.strip():
+            click.echo("ℹ️  No changes to commit")
+            commit_message = None
         else:
-            click.echo("✅ Changes committed successfully")
-        
-        # Push to remote repository
-        click.echo(f"\n📤 Pushing branch '{branch_name}' to remote...")
-        push_result = container.exec_run(
-            f"git push -u origin {branch_name}",
-            workdir=DEFAULT_WORKDIR
-        )
-        
-        if push_result.exit_code != 0:
-            click.echo(f"\n❌ Error: Failed to push branch\n{push_result.output.decode()}", err=True)
-            raise Exception("Failed to push branch")
-        
-        # Step 4: Create pull request
-        click.echo("\n🔀 Creating pull request...")
-        
-        pr_title = f"Task: {branch_name}"
-        pr_body = f"## 📋 Task Description\n\n{task_description}\n\n---\n\n*This PR was created automatically by claude-container task*"
-        
-        try:
-            pr_result = subprocess.run(
-                [
-                    "gh", "pr", "create",
-                    "--title", pr_title,
-                    "--body", pr_body,
-                    "--head", branch_name,
-                    "--draft"
-                ],
-                capture_output=True,
-                text=True,
-                check=True
+            # Ask Claude to commit the changes
+            commit_prompt = f"Please commit all the changes you made. Review the changes with git diff and git status, then create a meaningful commit message that describes what was accomplished for the task: {task_description}"
+            
+            click.echo("\n🤖 Asking Claude to commit the changes...")
+            click.echo("-" * 60 + "\n")
+            
+            commit_result = container.exec_run(
+                ["claude", "--model=sonnet", "-p", commit_prompt],
+                workdir=DEFAULT_WORKDIR,
+                stream=True
             )
             
-            click.echo("\n✅ Pull request created successfully!")
-            click.echo(pr_result.stdout)
+            # Stream Claude's commit output
+            for chunk in commit_result.output:
+                click.echo(chunk.decode(), nl=False)
             
-        except subprocess.CalledProcessError as e:
-            error_msg = e.stderr if e.stderr else str(e)
-            click.echo(f"\n❌ Error: Failed to create PR\n{error_msg}", err=True)
-            click.echo("\nℹ️  Make sure you have the GitHub CLI installed and authenticated")
+            # Extract commit message from the last commit
+            get_commit_msg = container.exec_run(
+                "git log -1 --pretty=%B",
+                workdir=DEFAULT_WORKDIR
+            )
+            
+            if get_commit_msg.exit_code == 0:
+                commit_message = get_commit_msg.output.decode().strip()
+                click.echo("\n\n✅ Changes committed successfully")
+            else:
+                click.echo("\n\n⚠️  Warning: Could not retrieve commit message")
+                commit_message = f"Task: {task_description}"
         
-        click.echo(f"\n🎉 Task completed successfully!")
+        # Push to remote repository only if there was a commit
+        if commit_message:
+            click.echo(f"\n📤 Pushing branch '{branch_name}' to remote...")
+            push_result = container.exec_run(
+                f"git push -u origin {branch_name}",
+                workdir=DEFAULT_WORKDIR
+            )
+            
+            if push_result.exit_code != 0:
+                click.echo(f"\n❌ Error: Failed to push branch\n{push_result.output.decode()}", err=True)
+                raise Exception("Failed to push branch")
+            
+            # Step 4: Create pull request
+            click.echo("\n🔀 Creating pull request...")
+            
+            # Extract first line of commit message for PR title
+            pr_title = commit_message.split('\n')[0]
+            # Use full commit message in PR body
+            pr_body = f"## 📋 Task Description\n\n{task_description}\n\n## 💬 Changes Made\n\n{commit_message}\n\n---\n\n*This PR was created automatically by claude-container task*"
+            
+            try:
+                pr_result = subprocess.run(
+                    [
+                        "gh", "pr", "create",
+                        "--title", pr_title,
+                        "--body", pr_body,
+                        "--head", branch_name,
+                        "--draft"
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+                
+                click.echo("\n✅ Pull request created successfully!")
+                click.echo(pr_result.stdout)
+                
+            except subprocess.CalledProcessError as e:
+                error_msg = e.stderr if e.stderr else str(e)
+                click.echo(f"\n❌ Error: Failed to create PR\n{error_msg}", err=True)
+                click.echo("\nℹ️  Make sure you have the GitHub CLI installed and authenticated")
+        else:
+            click.echo("\n⚠️  No changes were made, skipping PR creation")
+        
+        click.echo("\n🎉 Task completed successfully!")
         click.echo(f"   Branch: {branch_name}")
-        click.echo(f"   Status: Ready for review")
+        if commit_message:
+            click.echo("   Status: PR created and ready for review")
+        else:
+            click.echo("   Status: No changes were made")
         
     except Exception as e:
         click.echo(f"\n❌ Error during task execution: {e}", err=True)
