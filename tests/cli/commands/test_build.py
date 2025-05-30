@@ -1,4 +1,5 @@
 import pytest
+import subprocess
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 from click.testing import CliRunner
@@ -8,13 +9,17 @@ from claude_container.cli.commands.build import build
 class TestBuildCommand:
     """Smoke tests for build command."""
     
+    @patch('claude_container.cli.commands.build.subprocess.check_output')
     @patch('claude_container.cli.commands.build.DockerClient')
     @patch('claude_container.cli.commands.build.ConfigManager')
     @patch('claude_container.core.dockerfile_generator.DockerfileGenerator')
     @patch('claude_container.cli.commands.build.PathFinder')
     def test_build_command_success(self, mock_path_finder_class, mock_generator_class, 
-                                  mock_config_manager_class, mock_docker_client_class, cli_runner):
+                                  mock_config_manager_class, mock_docker_client_class, mock_subprocess, cli_runner):
         """Test successful build command."""
+        # Setup git config mocks
+        mock_subprocess.side_effect = ["test@example.com", "Test User"]
+        
         # Setup mocks
         mock_docker = MagicMock()
         mock_docker.image_exists.return_value = False
@@ -82,12 +87,16 @@ class TestBuildCommand:
         assert "already exists. Use --force-rebuild" in result.output
         mock_docker.build_image.assert_not_called()
     
+    @patch('claude_container.cli.commands.build.subprocess.check_output')
     @patch('claude_container.cli.commands.build.DockerClient')
     @patch('claude_container.cli.commands.build.ConfigManager')
     @patch('claude_container.core.dockerfile_generator.DockerfileGenerator')
     def test_build_command_force_rebuild(self, mock_generator_class, mock_config_manager_class,
-                                       mock_docker_client_class, cli_runner):
+                                       mock_docker_client_class, mock_subprocess, cli_runner):
         """Test build command with --force-rebuild flag."""
+        # Setup git config mocks
+        mock_subprocess.side_effect = ["test@example.com", "Test User"]
+        
         # Setup mocks
         mock_docker = MagicMock()
         mock_docker.image_exists.return_value = True
@@ -112,6 +121,24 @@ class TestBuildCommand:
         assert "Removing existing image" in result.output
         mock_docker.remove_image.assert_called_once()
         mock_docker.build_image.assert_called_once()
+    
+    @patch('claude_container.cli.commands.build.subprocess.check_output')
+    @patch('claude_container.cli.commands.build.DockerClient')
+    def test_build_command_no_git_config(self, mock_docker_client_class, mock_subprocess, cli_runner):
+        """Test build command when git config is not set."""
+        # Setup mocks - subprocess raises error when git config not found
+        mock_subprocess.side_effect = subprocess.CalledProcessError(1, 'git config')
+        
+        mock_docker = MagicMock()
+        mock_docker.image_exists.return_value = False
+        mock_docker_client_class.return_value = mock_docker
+        
+        result = cli_runner.invoke(build, [])
+        
+        assert "Error: Git user configuration not found" in result.output
+        assert 'git config --global user.email' in result.output
+        assert 'git config --global user.name' in result.output
+        mock_docker.build_image.assert_not_called()
     
     def test_build_command_help(self, cli_runner):
         """Test build command help."""
