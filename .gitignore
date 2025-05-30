@@ -15,6 +15,15 @@ build/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+*.pyc
+
+# Coverage
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
 
 # Claude specific
 .claude/settings.local.json
