@@ -250,9 +250,9 @@ def start():
             click.echo(f"\n❌ Error: Failed to create PR\n{error_msg}", err=True)
             click.echo("\nℹ️  Make sure you have the GitHub CLI installed and authenticated")
         
-        click.echo(f"\n🎉 Task completed successfully!")
+        click.echo("\n🎉 Task completed successfully!")
         click.echo(f"   Branch: {branch_name}")
-        click.echo(f"   Status: Ready for review")
+        click.echo("   Status: Ready for review")
         
     except Exception as e:
         click.echo(f"\n❌ Error during task execution: {e}", err=True)
