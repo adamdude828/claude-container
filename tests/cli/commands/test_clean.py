@@ -91,4 +91,84 @@ class TestCleanCommand:
         result = runner.invoke(clean, ['--help'])
         
         assert result.exit_code == 0
-        assert "Clean up container data and images" in result.output
+        assert "Clean up container data, images, and optionally task containers" in result.output
+    
+    @patch('claude_container.cli.commands.clean.shutil.rmtree')
+    @patch('claude_container.cli.commands.clean.DockerClient')
+    def test_clean_command_with_containers(self, mock_docker_client_class, mock_rmtree):
+        """Test clean command with --containers flag."""
+        # Setup mock
+        mock_docker_client = MagicMock()
+        mock_docker_client.image_exists.return_value = True
+        mock_docker_client.cleanup_task_containers.return_value = 2
+        mock_docker_client_class.return_value = mock_docker_client
+        
+        # Run command with isolated filesystem
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            # Create .claude-container directory
+            data_dir = Path(".claude-container")
+            data_dir.mkdir()
+            
+            result = runner.invoke(clean, ['--containers'])
+        
+        # Verify
+        assert result.exit_code == 0
+        assert "Cleaning up task containers..." in result.output
+        assert "Removed 2 task container(s)" in result.output
+        assert "Cleaned up container resources" in result.output
+        mock_docker_client.cleanup_task_containers.assert_called_once()
+        mock_docker_client.remove_image.assert_called_once()
+    
+    @patch('claude_container.cli.commands.clean.shutil.rmtree')
+    @patch('claude_container.cli.commands.clean.DockerClient')
+    def test_clean_command_with_containers_none_found(self, mock_docker_client_class, mock_rmtree):
+        """Test clean command with --containers flag when no containers found."""
+        # Setup mock
+        mock_docker_client = MagicMock()
+        mock_docker_client.image_exists.return_value = True
+        mock_docker_client.cleanup_task_containers.return_value = 0
+        mock_docker_client_class.return_value = mock_docker_client
+        
+        # Run command with isolated filesystem
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            # Create .claude-container directory
+            data_dir = Path(".claude-container")
+            data_dir.mkdir()
+            
+            result = runner.invoke(clean, ['--containers'])
+        
+        # Verify
+        assert result.exit_code == 0
+        assert "Cleaning up task containers..." in result.output
+        assert "No task containers found" in result.output
+        assert "Cleaned up container resources" in result.output
+        mock_docker_client.cleanup_task_containers.assert_called_once()
+    
+    @patch('claude_container.cli.commands.clean.shutil.rmtree')
+    @patch('claude_container.cli.commands.clean.DockerClient')
+    def test_clean_command_with_force(self, mock_docker_client_class, mock_rmtree):
+        """Test clean command with --force flag."""
+        # Setup mock
+        mock_docker_client = MagicMock()
+        mock_docker_client.image_exists.return_value = True
+        mock_docker_client.cleanup_task_containers.return_value = 1
+        mock_docker_client_class.return_value = mock_docker_client
+        
+        # Run command with isolated filesystem
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            # Create .claude-container directory
+            data_dir = Path(".claude-container")
+            data_dir.mkdir()
+            
+            result = runner.invoke(clean, ['--containers', '--force'])
+        
+        # Verify
+        assert result.exit_code == 0
+        assert "Cleaning up task containers..." in result.output
+        assert "Removed 1 task container(s)" in result.output
+        # Check that force parameter was passed
+        args, kwargs = mock_docker_client.cleanup_task_containers.call_args
+        assert kwargs.get('force') is True
