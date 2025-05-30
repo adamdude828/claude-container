@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 from click.testing import CliRunner
 from pathlib import Path
 
-from claude_container.cli.commands.task import task, start
+from claude_container.cli.commands.task import task, start, list as task_list
 
 
 class TestTaskCommand:
@@ -149,3 +149,70 @@ class TestTaskCommand:
         assert result.exit_code == 0
         assert "Manage Claude tasks" in result.output
         assert "start" in result.output
+    
+    @patch('claude_container.cli.commands.task.Path')
+    @patch('claude_container.core.docker_client.DockerClient')
+    def test_task_list_no_containers(self, mock_docker_client_class, mock_path, cli_runner):
+        """Test task list command with no containers."""
+        # Mock Path.cwd()
+        mock_cwd = MagicMock()
+        mock_cwd.name = "test-project"
+        mock_path.cwd.return_value = mock_cwd
+        
+        # Mock DockerClient
+        mock_docker_client = MagicMock()
+        mock_docker_client.list_task_containers.return_value = []
+        mock_docker_client_class.return_value = mock_docker_client
+        
+        result = cli_runner.invoke(task_list)
+        assert result.exit_code == 0
+        assert "No task containers found for this project" in result.output
+    
+    @patch('claude_container.cli.commands.task.Path')
+    @patch('claude_container.core.docker_client.DockerClient')
+    def test_task_list_with_containers(self, mock_docker_client_class, mock_path, cli_runner):
+        """Test task list command with containers."""
+        # Mock Path.cwd()
+        mock_cwd = MagicMock()
+        mock_cwd.name = "test-project"
+        mock_path.cwd.return_value = mock_cwd
+        
+        # Mock containers
+        mock_container1 = MagicMock()
+        mock_container1.name = "claude-container-task-test-abc123"
+        mock_container1.status = "running"
+        mock_container1.attrs = {'Created': '2024-01-01T10:00:00.123456789Z'}
+        
+        mock_container2 = MagicMock()
+        mock_container2.name = "claude-container-task-test-def456"
+        mock_container2.status = "exited"
+        mock_container2.attrs = {'Created': '2024-01-01T11:00:00.987654321Z'}
+        
+        mock_container3 = MagicMock()
+        mock_container3.name = "claude-container-task-test-ghi789"
+        mock_container3.status = "paused"
+        mock_container3.attrs = {'Created': '2024-01-01T12:00:00.555444333Z'}
+        
+        # Mock DockerClient
+        mock_docker_client = MagicMock()
+        mock_docker_client.list_task_containers.return_value = [mock_container1, mock_container2, mock_container3]
+        mock_docker_client_class.return_value = mock_docker_client
+        
+        result = cli_runner.invoke(task_list)
+        assert result.exit_code == 0
+        assert "Task containers for project 'test-project':" in result.output
+        assert "claude-container-task-test-abc123" in result.output
+        assert "claude-container-task-test-def456" in result.output
+        assert "claude-container-task-test-ghi789" in result.output
+        assert "RUNNING" in result.output
+        assert "EXITED" in result.output
+        assert "PAUSED" in result.output
+    
+    @patch('claude_container.core.docker_client.DockerClient')
+    def test_task_list_docker_error(self, mock_docker_client_class, cli_runner):
+        """Test task list command with Docker error."""
+        mock_docker_client_class.side_effect = RuntimeError("Docker not running")
+        
+        result = cli_runner.invoke(task_list)
+        assert result.exit_code == 1
+        assert "Error: Docker not running" in result.output

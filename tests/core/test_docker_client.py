@@ -146,3 +146,111 @@ class TestDockerClient:
         mock_container1.remove.assert_called_once()
         mock_container2.stop.assert_called_once()
         mock_container2.remove.assert_called_once()
+    
+    @patch('claude_container.core.docker_client.docker.from_env')
+    def test_docker_client_initialization_generic_docker_error(self, mock_docker_from_env):
+        """Test initialization with generic Docker error."""
+        from docker.errors import DockerException
+        
+        # Test DockerException error that doesn't match connection patterns
+        mock_client = MagicMock()
+        mock_client.ping.side_effect = DockerException("Some other error")
+        mock_docker_from_env.return_value = mock_client
+        
+        with pytest.raises(RuntimeError, match="Failed to connect to Docker"):
+            DockerClient()
+    
+    @patch('claude_container.core.docker_client.docker.from_env')
+    def test_get_client(self, mock_docker_from_env):
+        """Test getting the underlying Docker client."""
+        mock_client = MagicMock()
+        mock_docker_from_env.return_value = mock_client
+        
+        docker_client = DockerClient()
+        result = docker_client.get_client()
+        
+        assert result == mock_client
+    
+    @patch('claude_container.core.docker_client.docker.from_env')
+    def test_remove_image_success(self, mock_docker_from_env):
+        """Test removing an image successfully."""
+        mock_client = MagicMock()
+        mock_docker_from_env.return_value = mock_client
+        
+        docker_client = DockerClient()
+        docker_client.remove_image("test-image:latest", force=True)
+        
+        mock_client.images.remove.assert_called_once_with("test-image:latest", force=True)
+    
+    @patch('claude_container.core.docker_client.docker.from_env')
+    @patch('builtins.print')
+    def test_remove_image_failure(self, mock_print, mock_docker_from_env):
+        """Test removing an image that doesn't exist."""
+        mock_client = MagicMock()
+        mock_client.images.remove.side_effect = Exception("Image not found")
+        mock_docker_from_env.return_value = mock_client
+        
+        docker_client = DockerClient()
+        docker_client.remove_image("nonexistent-image")
+        
+        mock_print.assert_called_with("Warning: Could not remove image nonexistent-image: Image not found")
+    
+    @patch('claude_container.core.docker_client.docker.from_env')
+    def test_run_container(self, mock_docker_from_env):
+        """Test running a container."""
+        mock_client = MagicMock()
+        mock_container = Mock()
+        mock_client.containers.run.return_value = mock_container
+        mock_docker_from_env.return_value = mock_client
+        
+        docker_client = DockerClient()
+        result = docker_client.run_container("test-image", "echo hello", detach=True)
+        
+        assert result == mock_container
+        mock_client.containers.run.assert_called_once_with("test-image", "echo hello", detach=True)
+    
+    @patch('claude_container.core.docker_client.docker.from_env')
+    def test_copy_to_container(self, mock_docker_from_env):
+        """Test copying a file to a container."""
+        import tempfile
+        import os
+        
+        mock_client = MagicMock()
+        mock_container = Mock()
+        mock_client.containers.get.return_value = mock_container
+        mock_docker_from_env.return_value = mock_client
+        
+        docker_client = DockerClient()
+        
+        # Create a temporary file to copy
+        with tempfile.NamedTemporaryFile(mode='w', delete=False) as tmp:
+            tmp.write("test content")
+            tmp_path = tmp.name
+        
+        try:
+            docker_client.copy_to_container("container-id", tmp_path, "/test/file.txt")
+            
+            mock_client.containers.get.assert_called_once_with("container-id")
+            mock_container.put_archive.assert_called_once()
+        finally:
+            os.unlink(tmp_path)
+    
+    @patch('claude_container.core.docker_client.docker.from_env')
+    def test_cleanup_task_containers_with_exceptions(self, mock_docker_from_env):
+        """Test cleanup handling exceptions gracefully."""
+        mock_client = MagicMock()
+        
+        # Create mock containers
+        mock_container1 = Mock()
+        mock_container1.name = "claude-container-task-project1-abc12345"
+        mock_container1.status = "exited"
+        mock_container1.remove.side_effect = Exception("Container in use")
+        
+        mock_client.containers.list.return_value = [mock_container1]
+        mock_docker_from_env.return_value = mock_client
+        
+        docker_client = DockerClient()
+        
+        # Should handle exception and return 0
+        removed = docker_client.cleanup_task_containers(project_name="project1", force=False)
+        assert removed == 0

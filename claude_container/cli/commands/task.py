@@ -62,131 +62,141 @@ def list():
 
 @task.command()
 def start():
-    """Start a new task with Claude authentication check"""
-    # Check authentication first
+    """Start a new task with Claude authentication check."""
+    # Verify Claude authentication
     if not check_claude_auth():
         sys.exit(1)
     
-    # Get project info
+    # Initialize project configuration
     project_root = Path.cwd()
     data_dir = project_root / DATA_DIR_NAME
     
+    # Validate container environment
     if not data_dir.exists():
-        click.echo("No container found. Please run 'claude-container build' first.", err=True)
+        click.echo("Error: No container found. Please run 'claude-container build' first.", err=True)
         sys.exit(1)
     
     image_name = f"{CONTAINER_PREFIX}-{project_root.name}".lower()
     
+    # Initialize container runner
     try:
         container_runner = ContainerRunner(project_root, data_dir, image_name)
     except RuntimeError as e:
-        click.echo(f"Error: {e}", err=True)
+        click.echo(f"Error initializing container: {e}", err=True)
         sys.exit(1)
     
-    # Check if image exists
+    # Verify container image exists
     if not container_runner.docker_client.image_exists(image_name):
-        click.echo(f"Container image '{image_name}' not found.", err=True)
+        click.echo(f"Error: Container image '{image_name}' not found.", err=True)
         click.echo("Please run 'claude-container build' first.")
         sys.exit(1)
     
-    # Prompt for branch name and task description
-    branch_name = click.prompt("Enter the branch name for this task")
-    task_description = click.prompt("Enter the task description")
+    # Collect task parameters
+    click.echo("\n" + "=" * 60)
+    click.echo("Claude Container Task Setup")
+    click.echo("=" * 60 + "\n")
     
-    # Validate inputs
+    branch_name = click.prompt("Branch name")
+    task_description = click.prompt("Task description")
+    
+    # Validate user inputs
     if not branch_name or branch_name.isspace():
-        click.echo("Branch name cannot be empty", err=True)
+        click.echo("\nError: Branch name cannot be empty.", err=True)
         sys.exit(1)
     
     if not task_description or task_description.isspace():
-        click.echo("Task description cannot be empty", err=True)
+        click.echo("\nError: Task description cannot be empty.", err=True)
         sys.exit(1)
     
     container = None
     try:
-        click.echo(f"\nStarting task on branch '{branch_name}'...")
+        click.echo(f"\n🚀 Starting task on branch '{branch_name}'...\n")
         
-        # Create persistent container using ContainerRunner
+        # Create persistent container for task execution
         container = container_runner.create_persistent_container("task")
         
-        # Copy liberal settings.local.json to project's .claude directory
-        # Create .claude directory in workspace if it doesn't exist
+        # Configure Claude settings for the project
+        click.echo("📝 Configuring Claude settings...")
+        
+        # Create .claude directory in workspace
         container.exec_run(f"mkdir -p {DEFAULT_WORKDIR}/.claude")
         
-        # Write settings.local.json to workspace .claude directory
+        # Write liberal settings configuration
         write_cmd = f"echo '{LIBERAL_SETTINGS_JSON}' > {DEFAULT_WORKDIR}/.claude/settings.local.json"
         settings_result = container.exec_run(["sh", "-c", write_cmd])
         
         if settings_result.exit_code != 0:
-            click.echo("Warning: Failed to write settings.local.json to project", err=True)
+            click.echo("⚠️  Warning: Failed to write settings.local.json", err=True)
         
-        # Also add .claude/settings.local.json to .gitignore if not already there
+        # Update .gitignore to exclude settings file
         gitignore_check = container.exec_run(
             f"grep -q '^.claude/settings.local.json$' {DEFAULT_WORKDIR}/.gitignore",
             workdir=DEFAULT_WORKDIR
         )
         
         if gitignore_check.exit_code != 0:
-            # Not in .gitignore, add it
             container.exec_run(
                 f"echo '.claude/settings.local.json' >> {DEFAULT_WORKDIR}/.gitignore",
                 workdir=DEFAULT_WORKDIR
             )
         
-        # Step 1: Checkout branch and pull
-        click.echo(f"Checking out branch '{branch_name}'...")
+        # Step 1: Git branch setup
+        click.echo(f"\n🌿 Setting up branch '{branch_name}'...")
         
-        # Check if branch exists locally
+        # Attempt to create new branch
         checkout_result = container.exec_run(
             f"git checkout -b {branch_name}",
             workdir=DEFAULT_WORKDIR
         )
         
         if checkout_result.exit_code != 0:
-            # Branch might already exist, try just checking out
+            # Branch exists - switch to it
             checkout_result = container.exec_run(
                 f"git checkout {branch_name}",
                 workdir=DEFAULT_WORKDIR
             )
             
             if checkout_result.exit_code != 0:
-                click.echo(f"Error checking out branch: {checkout_result.output.decode()}", err=True)
+                click.echo(f"\n❌ Error: Failed to checkout branch\n{checkout_result.output.decode()}", err=True)
                 raise Exception("Failed to checkout branch")
         
-        # Pull latest changes
+        # Sync with remote
+        click.echo("📥 Pulling latest changes...")
         container.exec_run(
             "git pull",
             workdir=DEFAULT_WORKDIR
         )
         
-        # Step 2: Run Claude Code with the task description
-        click.echo(f"\nRunning Claude Code with task: {task_description}")
-        click.echo("This may take a while...\n")
+        # Step 2: Execute Claude task
+        click.echo(f"\n🤖 Running Claude with task:\n   {task_description}")
+        click.echo("\n" + "-" * 60)
+        click.echo("Claude is working on your task...")
+        click.echo("-" * 60 + "\n")
         
-        # Run Claude interactively
+        # Execute Claude with the task
         claude_result = container.exec_run(
             ["claude", "--model=sonnet", "-p", task_description],
             workdir=DEFAULT_WORKDIR,
             stream=True
         )
         
-        # Stream output to user
+        # Stream Claude's output in real-time
         for chunk in claude_result.output:
             click.echo(chunk.decode(), nl=False)
         
         # Step 3: Commit changes
-        click.echo("\n\nCommitting changes...")
+        click.echo("\n\n💾 Committing changes...")
         
-        # Add all changes
+        # Stage all changes
         add_result = container.exec_run(
             "git add -A",
             workdir=DEFAULT_WORKDIR
         )
         
         if add_result.exit_code != 0:
-            click.echo(f"Warning: git add failed: {add_result.output.decode()}")
+            click.echo(f"⚠️  Warning: Failed to stage changes: {add_result.output.decode()}")
         
-        # Commit with static message for now
+        # Create commit with descriptive message
         commit_message = f"Task: {task_description}\n\nAutomated commit from claude-container task"
         commit_result = container.exec_run(
             ["git", "commit", "-m", commit_message],
@@ -195,28 +205,28 @@ def start():
         
         if commit_result.exit_code != 0:
             if b"nothing to commit" in commit_result.output:
-                click.echo("No changes to commit")
+                click.echo("ℹ️  No changes to commit")
             else:
-                click.echo(f"Error committing: {commit_result.output.decode()}", err=True)
+                click.echo(f"❌ Error: Commit failed\n{commit_result.output.decode()}", err=True)
         else:
-            click.echo("Changes committed successfully")
+            click.echo("✅ Changes committed successfully")
         
-        # Push the branch
-        click.echo(f"Pushing branch '{branch_name}'...")
+        # Push to remote repository
+        click.echo(f"\n📤 Pushing branch '{branch_name}' to remote...")
         push_result = container.exec_run(
             f"git push -u origin {branch_name}",
             workdir=DEFAULT_WORKDIR
         )
         
         if push_result.exit_code != 0:
-            click.echo(f"Error pushing branch: {push_result.output.decode()}", err=True)
+            click.echo(f"\n❌ Error: Failed to push branch\n{push_result.output.decode()}", err=True)
             raise Exception("Failed to push branch")
         
-        # Step 4: Create PR using gh CLI (run on host, not in container)
-        click.echo("\nCreating pull request...")
+        # Step 4: Create pull request
+        click.echo("\n🔀 Creating pull request...")
         
         pr_title = f"Task: {branch_name}"
-        pr_body = f"## Task Description\n{task_description}\n\n---\nThis PR was created automatically by claude-container task"
+        pr_body = f"## 📋 Task Description\n\n{task_description}\n\n---\n\n*This PR was created automatically by claude-container task*"
         
         try:
             pr_result = subprocess.run(
@@ -232,30 +242,32 @@ def start():
                 check=True
             )
             
-            click.echo("Pull request created successfully!")
+            click.echo("\n✅ Pull request created successfully!")
             click.echo(pr_result.stdout)
             
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr if e.stderr else str(e)
-            click.echo(f"Error creating PR: {error_msg}", err=True)
-            click.echo("Make sure you have the GitHub CLI installed and authenticated")
+            click.echo(f"\n❌ Error: Failed to create PR\n{error_msg}", err=True)
+            click.echo("\nℹ️  Make sure you have the GitHub CLI installed and authenticated")
         
-        click.echo(f"\n✓ Task completed successfully on branch '{branch_name}'")
+        click.echo(f"\n🎉 Task completed successfully!")
+        click.echo(f"   Branch: {branch_name}")
+        click.echo(f"   Status: Ready for review")
         
     except Exception as e:
-        click.echo(f"Error during task execution: {e}", err=True)
+        click.echo(f"\n❌ Error during task execution: {e}", err=True)
         sys.exit(1)
         
     finally:
-        # Step 5: Cleanup - remove container
+        # Step 5: Cleanup
         if container:
             try:
-                click.echo("\nCleaning up container...")
+                click.echo("\n🧹 Cleaning up resources...")
                 container.stop()
                 container.remove()
-                click.echo("Container removed")
+                click.echo("✅ Container removed successfully")
             except Exception as e:
-                click.echo(f"Warning: Failed to remove container: {e}", err=True)
+                click.echo(f"⚠️  Warning: Failed to remove container: {e}", err=True)
 
 
 @task.command()
