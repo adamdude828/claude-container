@@ -4,9 +4,10 @@ from pathlib import Path
 from typing import List, Optional, Dict
 import subprocess
 import docker.errors
+import uuid
 
 from .docker_client import DockerClient
-from ..core.constants import DEFAULT_WORKDIR
+from ..core.constants import DEFAULT_WORKDIR, CONTAINER_PREFIX
 
 
 class ContainerRunner:
@@ -256,16 +257,34 @@ class ContainerRunner:
             container.remove()
     
     def create_persistent_container(self, name_suffix: str = "task"):
-        """Create a persistent container for multi-step operations."""
+        """Create a persistent container for multi-step operations.
+        
+        Container naming strategy:
+        - Prefix: {CONTAINER_PREFIX}-{name_suffix}-{project_name}
+        - Suffix: Random 8-character UUID hex
+        
+        This allows easy identification and cleanup of task containers.
+        """
+        # Generate a unique container name with deterministic prefix and random suffix
+        random_suffix = uuid.uuid4().hex[:8]
+        container_name = f"{CONTAINER_PREFIX}-{name_suffix}-{self.project_root.name}-{random_suffix}".lower()
+        
         config = self._get_container_config(
             command="sleep infinity",  # Keep container running
             tty=False,
             stdin_open=False,
             detach=True,
             remove=False,  # Don't auto-remove
-            name=f"claude-{name_suffix}-{self.project_root.name}".lower()
+            name=container_name
         )
-        config['labels'] = {"claude-container": "true", "claude-container-type": name_suffix}
+        
+        # Add labels for easy identification and filtering
+        config['labels'] = {
+            "claude-container": "true",
+            "claude-container-type": name_suffix,
+            "claude-container-project": self.project_root.name.lower(),
+            "claude-container-prefix": CONTAINER_PREFIX
+        }
         
         try:
             container = self.docker_client.client.containers.run(**config)

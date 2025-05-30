@@ -82,3 +82,67 @@ class TestDockerClient:
             rm=True,
             nocache=False
         )
+    
+    @patch('claude_container.core.docker_client.docker.from_env')
+    def test_list_task_containers(self, mock_docker_from_env):
+        """Test listing task containers."""
+        mock_client = MagicMock()
+        mock_container1 = Mock()
+        mock_container1.name = "claude-container-task-project1-abc12345"
+        mock_container2 = Mock()
+        mock_container2.name = "claude-container-task-project1-def67890"
+        mock_container3 = Mock()
+        mock_container3.name = "other-container"
+        
+        mock_client.containers.list.return_value = [mock_container1, mock_container2, mock_container3]
+        mock_docker_from_env.return_value = mock_client
+        
+        docker_client = DockerClient()
+        
+        # Test with project name filter
+        containers = docker_client.list_task_containers(project_name="project1")
+        mock_client.containers.list.assert_called_with(
+            all=True, 
+            filters={"label": ["claude-container=true", "claude-container-project=project1"]}
+        )
+        
+        # Test with name prefix filter
+        containers = docker_client.list_task_containers(name_prefix="claude-container-task")
+        assert len(containers) == 2
+        assert mock_container3 not in containers
+    
+    @patch('claude_container.core.docker_client.docker.from_env')
+    def test_cleanup_task_containers(self, mock_docker_from_env):
+        """Test cleaning up task containers."""
+        mock_client = MagicMock()
+        
+        # Create mock containers
+        mock_container1 = Mock()
+        mock_container1.name = "claude-container-task-project1-abc12345"
+        mock_container1.status = "exited"
+        
+        mock_container2 = Mock()
+        mock_container2.name = "claude-container-task-project1-def67890"
+        mock_container2.status = "running"
+        
+        mock_client.containers.list.return_value = [mock_container1, mock_container2]
+        mock_docker_from_env.return_value = mock_client
+        
+        docker_client = DockerClient()
+        
+        # Test cleanup without force (should skip running container)
+        removed = docker_client.cleanup_task_containers(project_name="project1", force=False)
+        assert removed == 1
+        mock_container1.remove.assert_called_once()
+        mock_container2.stop.assert_not_called()
+        mock_container2.remove.assert_not_called()
+        
+        # Reset mocks
+        mock_container1.remove.reset_mock()
+        
+        # Test cleanup with force (should stop and remove all)
+        removed = docker_client.cleanup_task_containers(project_name="project1", force=True)
+        assert removed == 2
+        mock_container1.remove.assert_called_once()
+        mock_container2.stop.assert_called_once()
+        mock_container2.remove.assert_called_once()

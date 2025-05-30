@@ -17,6 +17,50 @@ def task():
 
 
 @task.command()
+def list():
+    """List all task containers for the current project"""
+    from ...core.docker_client import DockerClient
+    from ...core.constants import CONTAINER_PREFIX
+    
+    project_root = Path.cwd()
+    
+    try:
+        docker_client = DockerClient()
+        
+        # List containers for this project
+        containers = docker_client.list_task_containers(
+            name_prefix=f"{CONTAINER_PREFIX}-task",
+            project_name=project_root.name
+        )
+        
+        if not containers:
+            click.echo("No task containers found for this project")
+            return
+        
+        click.echo(f"Task containers for project '{project_root.name}':")
+        click.echo("-" * 60)
+        
+        for container in containers:
+            status = container.status
+            name = container.name
+            created = container.attrs['Created'][:19]  # Truncate to readable format
+            
+            # Color code status
+            if status == 'running':
+                status_display = click.style(status.upper(), fg='green')
+            elif status == 'exited':
+                status_display = click.style(status.upper(), fg='yellow')
+            else:
+                status_display = click.style(status.upper(), fg='red')
+            
+            click.echo(f"{name:<40} {status_display:<10} {created}")
+            
+    except RuntimeError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+
+@task.command()
 def start():
     """Start a new task with Claude authentication check"""
     # Check authentication first

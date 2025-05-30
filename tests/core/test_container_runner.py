@@ -83,10 +83,21 @@ class TestContainerRunner:
         assert call_kwargs['detach'] is True
         assert call_kwargs['remove'] is False  # Should not auto-remove
         assert call_kwargs['working_dir'] == '/workspace'
-        assert 'claude-task' in call_kwargs['name']
+        
+        # Check container naming pattern
+        container_name = call_kwargs['name']
+        assert container_name.startswith('claude-container-task-')
+        assert temp_project_dir.name.lower() in container_name
+        # Should end with 8 character hex suffix
+        parts = container_name.split('-')
+        assert len(parts[-1]) == 8
+        
+        # Check labels
         assert call_kwargs['labels'] == {
             "claude-container": "true",
-            "claude-container-type": "task"
+            "claude-container-type": "task",
+            "claude-container-project": temp_project_dir.name.lower(),
+            "claude-container-prefix": "claude-container"
         }
         
         # Check environment variables
