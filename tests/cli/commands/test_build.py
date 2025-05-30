@@ -59,10 +59,14 @@ class TestBuildCommand:
         assert result.exit_code == 0  # Click doesn't propagate exit code from return
         assert "Error: Docker daemon is not running" in result.output
     
+    @patch('claude_container.cli.commands.build.subprocess.check_output')
     @patch('claude_container.cli.commands.build.DockerClient')
     @patch('claude_container.cli.commands.build.PathFinder')
-    def test_build_command_claude_not_found(self, mock_path_finder_class, mock_docker_client_class, cli_runner):
+    def test_build_command_claude_not_found(self, mock_path_finder_class, mock_docker_client_class, mock_subprocess, cli_runner):
         """Test build command when Claude Code is not found."""
+        # Setup git config mocks
+        mock_subprocess.side_effect = ["test@example.com", "Test User"]
+        
         mock_docker = MagicMock()
         mock_docker.image_exists.return_value = False  # Image doesn't exist, so it will try to build
         mock_docker_client_class.return_value = mock_docker
