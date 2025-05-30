@@ -190,10 +190,8 @@ class TestContainerRunner:
         
         volumes = runner._get_volumes()
         
-        # Check project directory mount
-        assert str(temp_project_dir) in volumes
-        assert volumes[str(temp_project_dir)]['bind'] == '/workspace'
-        assert volumes[str(temp_project_dir)]['mode'] == 'rw'
+        # Project directory should NOT be mounted anymore
+        assert str(temp_project_dir) not in volumes
     
     @patch('claude_container.core.container_runner.subprocess.run')
     def test_run_interactive_container(self, mock_subprocess_run, temp_project_dir):

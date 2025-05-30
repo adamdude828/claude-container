@@ -2,6 +2,7 @@
 
 import click
 from pathlib import Path
+import subprocess
 
 from ...core.docker_client import DockerClient
 from ...utils.path_finder import PathFinder
@@ -38,6 +39,23 @@ def build(force_rebuild, no_cache, tag, claude_code_path):
         return
     
     click.echo(f"Building container for project: {project_root}")
+    
+    # Check git configuration
+    try:
+        git_user_email = subprocess.check_output(['git', 'config', '--get', 'user.email'], 
+                                                text=True, stderr=subprocess.DEVNULL).strip()
+        git_user_name = subprocess.check_output(['git', 'config', '--get', 'user.name'], 
+                                               text=True, stderr=subprocess.DEVNULL).strip()
+    except subprocess.CalledProcessError:
+        git_user_email = ""
+        git_user_name = ""
+    
+    if not git_user_email or not git_user_name:
+        click.echo("Error: Git user configuration not found.", err=True)
+        click.echo("Please configure git with:", err=True)
+        click.echo('  git config --global user.email "you@example.com"', err=True)
+        click.echo('  git config --global user.name "Your Name"', err=True)
+        return
     
     # Find Claude Code executable
     if not claude_code_path:
@@ -84,13 +102,19 @@ def build(force_rebuild, no_cache, tag, claude_code_path):
         elif no_cache:
             click.echo("Building without cache - all layers will be rebuilt...")
         
-        # Build image
+        # Build image with git config as build args
+        buildargs = {
+            'GIT_USER_EMAIL': git_user_email,
+            'GIT_USER_NAME': git_user_name
+        }
+        
         docker_client.build_image(
             path=str(project_root),
             dockerfile=str(temp_dockerfile),
             tag=tag,
             rm=True,
-            nocache=no_cache
+            nocache=no_cache,
+            buildargs=buildargs
         )
         
         click.echo(f"Container image built: {tag}")

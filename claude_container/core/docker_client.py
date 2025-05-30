@@ -41,14 +41,15 @@ class DockerClient:
         except Exception as e:
             print(f"Warning: Could not remove image {image_name}: {e}")
     
-    def build_image(self, path: str, dockerfile: str, tag: str, rm: bool = True, nocache: bool = False):
+    def build_image(self, path: str, dockerfile: str, tag: str, rm: bool = True, nocache: bool = False, buildargs: dict = None):
         """Build a Docker image."""
         return self.client.images.build(
             path=path,
             dockerfile=dockerfile,
             tag=tag,
             rm=rm,
-            nocache=nocache
+            nocache=nocache,
+            buildargs=buildargs
         )
     
     def run_container(self, image: str, command: str, **kwargs):
