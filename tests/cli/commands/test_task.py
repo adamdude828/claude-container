@@ -70,6 +70,14 @@ class TestTaskCommand:
         # Mock container
         mock_container = MagicMock()
         mock_container.exec_run.side_effect = [
+            # mkdir -p /workspace/.claude
+            MagicMock(exit_code=0, output=b""),
+            # echo settings > settings.local.json
+            MagicMock(exit_code=0, output=b""),
+            # grep gitignore check
+            MagicMock(exit_code=1, output=b""),  # Not found
+            # echo to gitignore
+            MagicMock(exit_code=0, output=b""),
             # git checkout
             MagicMock(exit_code=0, output=b"Switched to branch"),
             # git pull

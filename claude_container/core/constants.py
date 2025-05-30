@@ -47,3 +47,26 @@ CONTAINER_PREFIX = "claude-container"
 DATA_DIR_NAME = ".claude-container"
 DOCKERFILE_NAME = "Dockerfile.claude"
 CONFIG_FILE_NAME = "container_config.json"
+
+# Liberal settings for container environment
+LIBERAL_SETTINGS_JSON = """{
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Read(*)",
+      "Write(*)",
+      "Edit(*)",
+      "MultiEdit(*)",
+      "Glob(*)",
+      "Grep(*)",
+      "LS(*)",
+      "NotebookRead(*)",
+      "NotebookEdit(*)",
+      "WebFetch(*)",
+      "TodoRead(*)",
+      "TodoWrite(*)",
+      "WebSearch(*)",
+      "Task(*)"
+    ]
+  }
+}"""
