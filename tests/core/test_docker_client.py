@@ -80,7 +80,8 @@ class TestDockerClient:
             dockerfile="Dockerfile",
             tag="test-tag",
             rm=True,
-            nocache=False
+            nocache=False,
+            buildargs=None
         )
     
     @patch('claude_container.core.docker_client.docker.from_env')

@@ -181,10 +181,7 @@ class ContainerRunner:
     
     def _get_volumes(self) -> Dict[str, Dict[str, str]]:
         """Get volume mappings for the container."""
-        volumes = {
-            # Mount project directory to workspace
-            str(self.project_root): {'bind': DEFAULT_WORKDIR, 'mode': 'rw'}
-        }
+        volumes = {}
         
         # Mount Claude directory if it exists
         claude_dir = Path.home() / '.claude'

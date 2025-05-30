@@ -2,6 +2,10 @@
 
 NODE_DOCKERFILE = """FROM node:20
 
+# Build arguments for git configuration
+ARG GIT_USER_EMAIL
+ARG GIT_USER_NAME
+
 # Install required system packages (minimal for now)
 RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
@@ -41,6 +45,10 @@ RUN git config --global --add safe.directory /workspace && \
 USER node
 RUN git config --global --add safe.directory /workspace && \
     git config --global --add safe.directory '*' && \
+    if [ -n "$GIT_USER_EMAIL" ] && [ -n "$GIT_USER_NAME" ]; then \
+        git config --global user.email "$GIT_USER_EMAIL" && \
+        git config --global user.name "$GIT_USER_NAME"; \
+    fi && \
     cd /workspace && \
     if [ -d .git ]; then \
         echo "Cleaning git repository state..." && \
