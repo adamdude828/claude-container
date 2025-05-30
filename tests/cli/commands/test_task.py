@@ -78,22 +78,18 @@ class TestTaskCommand:
             MagicMock(exit_code=1, output=b""),  # Not found
             # echo to gitignore
             MagicMock(exit_code=0, output=b""),
-            # git symbolic-ref to find main branch
-            MagicMock(exit_code=0, output=b"main"),
-            # git checkout main
-            MagicMock(exit_code=0, output=b"Switched to branch 'main'"),
+            # git checkout -b branch
+            MagicMock(exit_code=0, output=b"Switched to a new branch 'test-branch'"),
             # git pull
             MagicMock(exit_code=0, output=b"Already up to date"),
-            # git checkout -b new branch
-            MagicMock(exit_code=0, output=b"Switched to a new branch 'test-branch'"),
             # claude command - first run
             MagicMock(exit_code=0, output=[b"Task completed"]),
             # git status --porcelain
             MagicMock(exit_code=0, output=b"M src/index.js"),
-            # git diff --stat
-            MagicMock(exit_code=0, output=b"src/index.js | 5 +++++"),
             # claude command - second run for commit
             MagicMock(exit_code=0, output=[b"Committing changes"]),
+            # git log -1 --pretty=%B
+            MagicMock(exit_code=0, output=b"Add feature X\n\nImplemented feature X as requested"),
             # git push
             MagicMock(exit_code=0, output=b"Branch pushed")
         ]
