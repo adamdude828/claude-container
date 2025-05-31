@@ -246,3 +246,57 @@ class TestTaskStorageManager:
         assert retrieved.commit_hash == "abc123"
         assert retrieved.started_at is not None
         assert retrieved.completed_at is not None
+    
+    def test_get_task_history(self, storage_manager):
+        """Test getting task history."""
+        # Create tasks with different times
+        task1 = storage_manager.create_task("Old task", "old-branch")
+        task2 = storage_manager.create_task("Middle task", "middle-branch")
+        task3 = storage_manager.create_task("New task", "new-branch")
+        
+        # Get all history
+        history = storage_manager.get_task_history()
+        assert len(history) == 3
+        # Should be sorted newest first
+        assert history[0].id == task3.id
+        assert history[1].id == task2.id
+        assert history[2].id == task1.id
+        
+        # Test with limit
+        history = storage_manager.get_task_history(limit=2)
+        assert len(history) == 2
+        assert history[0].id == task3.id
+        assert history[1].id == task2.id
+        
+        # Test with branch filter
+        history = storage_manager.get_task_history(branch="middle-branch")
+        assert len(history) == 1
+        assert history[0].id == task2.id
+        
+        # Test with both limit and branch
+        storage_manager.create_task("Another middle task", "middle-branch")
+        history = storage_manager.get_task_history(limit=1, branch="middle-branch")
+        assert len(history) == 1
+        # Should get the newest one
+        assert history[0].description == "Another middle task"
+    
+    def test_search_tasks_no_results(self, storage_manager):
+        """Test searching tasks with no results."""
+        storage_manager.create_task("Task one", "branch-1")
+        storage_manager.create_task("Task two", "branch-2")
+        
+        results = storage_manager.search_tasks("nonexistent")
+        assert len(results) == 0
+    
+    def test_search_tasks_special_characters(self, storage_manager):
+        """Test searching tasks with special characters."""
+        storage_manager.create_task("Task with (parentheses)", "branch-1")
+        storage_manager.create_task("Task with [brackets]", "branch-2")
+        storage_manager.create_task("Task with special@chars", "branch-3")
+        
+        # Search should work with special characters
+        results = storage_manager.search_tasks("(parentheses)")
+        assert len(results) == 1
+        
+        results = storage_manager.search_tasks("special@")
+        assert len(results) == 1

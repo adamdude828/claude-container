@@ -878,6 +878,179 @@ def start():
 
 
 @task.command()
+@click.argument('task_id')
+@click.option('--follow', '-f', is_flag=True, help='Follow log output')
+@click.option('--feedback', is_flag=True, help='Show feedback history instead of execution logs')
+def logs(task_id, follow, feedback):
+    """View task execution logs"""
+    project_root = Path.cwd()
+    data_dir = project_root / DATA_DIR_NAME
+    
+    if not data_dir.exists():
+        click.echo("Error: No container configuration found.", err=True)
+        sys.exit(1)
+    
+    storage_manager = TaskStorageManager(data_dir)
+    
+    # Get task (support short IDs)
+    task_metadata = storage_manager.get_task(task_id)
+    if not task_metadata:
+        # Try to find by short ID
+        all_tasks = storage_manager.list_tasks()
+        matching_tasks = [t for t in all_tasks if t.id.startswith(task_id)]
+        if len(matching_tasks) == 1:
+            task_metadata = matching_tasks[0]
+            task_id = task_metadata.id
+        elif len(matching_tasks) > 1:
+            click.echo(f"Error: Multiple tasks found starting with '{task_id}'", err=True)
+            sys.exit(1)
+        else:
+            click.echo(f"Error: No task found with ID: {task_id}", err=True)
+            sys.exit(1)
+    
+    # Show feedback history if requested
+    if feedback:
+        if not task_metadata.feedback_history:
+            click.echo("No feedback history found for this task.")
+            return
+        
+        click.echo(f"\n💬 Feedback History for Task {task_id[:8]}:")
+        click.echo("=" * 80)
+        
+        for i, entry in enumerate(task_metadata.feedback_history, 1):
+            click.echo(f"\n[{i}] {entry.timestamp.strftime('%Y-%m-%d %H:%M:%S')} ({entry.feedback_type})")
+            click.echo("-" * 40)
+            click.echo(entry.feedback)
+            
+            if entry.claude_response_summary:
+                click.echo(f"\n📝 Claude's Response: {entry.claude_response_summary}")
+        return
+    
+    # Show execution logs
+    task_dir = data_dir / "tasks" / "tasks" / task_id
+    logs_dir = task_dir / "logs"
+    
+    if not logs_dir.exists():
+        click.echo(f"No logs found for task {task_id[:8]}")
+        return
+    
+    # Look for log files
+    claude_log = logs_dir / "claude_output.log"
+    execution_log = logs_dir / "execution.log"
+    
+    log_file = None
+    if claude_log.exists():
+        log_file = claude_log
+    elif execution_log.exists():
+        log_file = execution_log
+    else:
+        click.echo(f"No log files found in {logs_dir}")
+        return
+    
+    click.echo(f"\n📋 Execution Logs for Task {task_id[:8]}:")
+    click.echo(f"   Log file: {log_file.name}")
+    click.echo("=" * 80)
+    
+    if follow:
+        # Follow mode - tail the log file
+        import subprocess
+        try:
+            subprocess.run(['tail', '-f', str(log_file)], check=True)
+        except KeyboardInterrupt:
+            click.echo("\nStopped following logs.")
+    else:
+        # Just display the contents
+        try:
+            with open(log_file, 'r') as f:
+                click.echo(f.read())
+        except Exception as e:
+            click.echo(f"Error reading log file: {e}", err=True)
+
+
+@task.command()
+@click.argument('query')
+def search(query):
+    """Search tasks by description"""
+    project_root = Path.cwd()
+    data_dir = project_root / DATA_DIR_NAME
+    
+    if not data_dir.exists():
+        click.echo("Error: No container configuration found.", err=True)
+        sys.exit(1)
+    
+    storage_manager = TaskStorageManager(data_dir)
+    
+    # Search for matching tasks
+    matching_tasks = storage_manager.search_tasks(query)
+    
+    if not matching_tasks:
+        click.echo(f"\nNo tasks found matching '{query}'")
+        return
+    
+    click.echo(f"\n📋 Tasks matching '{query}':")
+    click.echo("=" * 120)
+    click.echo("ID       STATUS          BRANCH                         DESCRIPTION                                        CREATED")
+    click.echo("-" * 120)
+    
+    for task_item in matching_tasks:
+        click.echo(format_task_list_item(task_item))
+    
+    click.echo(f"\nFound {len(matching_tasks)} matching task(s)")
+
+
+@task.command()
+@click.option('--limit', '-n', type=int, default=10, help='Maximum number of tasks to show')
+@click.option('--branch', '-b', help='Filter by branch name')
+def history(limit, branch):
+    """Show task execution history"""
+    project_root = Path.cwd()
+    data_dir = project_root / DATA_DIR_NAME
+    
+    if not data_dir.exists():
+        click.echo("Error: No container configuration found.", err=True)
+        sys.exit(1)
+    
+    storage_manager = TaskStorageManager(data_dir)
+    
+    # Get task history
+    tasks = storage_manager.get_task_history(limit=limit, branch=branch)
+    
+    if not tasks:
+        if branch:
+            click.echo(f"\nNo task history found for branch '{branch}'")
+        else:
+            click.echo("\nNo task history found")
+        return
+    
+    # Display header
+    if branch:
+        click.echo(f"\n📋 Task history for branch '{branch}' (showing up to {limit} tasks):")
+    else:
+        click.echo(f"\n📋 Task history (showing up to {limit} tasks):")
+    
+    click.echo("=" * 120)
+    click.echo("ID       STATUS          BRANCH                         DESCRIPTION                                        CREATED")
+    click.echo("-" * 120)
+    
+    for task_item in tasks:
+        click.echo(format_task_list_item(task_item))
+    
+    # Display summary
+    click.echo(f"\nShowing {len(tasks)} task(s)")
+    
+    # Show statistics
+    status_counts = {}
+    for task in tasks:
+        status = task.status.value
+        status_counts[status] = status_counts.get(status, 0) + 1
+    
+    if len(status_counts) > 1:
+        click.echo("\nStatus breakdown:")
+        for status, count in sorted(status_counts.items()):
+            click.echo(f"  {status.capitalize()}: {count}")
+
+
+@task.command()
 def debug_settings():
     """Debug command to verify settings.local.json setup"""
     # Get project info

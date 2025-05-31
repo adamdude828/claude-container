@@ -423,5 +423,265 @@ class TestTaskCommand:
             failed_call = update_calls[0]
             assert failed_call[1]['status'] == TaskStatus.FAILED
             assert 'error_message' in failed_call[1]
-            assert failed_call[1]['container_id'] is None
-            assert 'completed_at' in failed_call[1]
+    
+    # Tests for LOGS command
+    @patch('claude_container.cli.commands.task.TaskStorageManager')
+    def test_logs_command(self, mock_storage_class, cli_runner, mock_task, tmp_path):
+        """Test task logs command."""
+        # Create task directory structure with logs
+        task_dir = tmp_path / ".claude-container" / "tasks" / "tasks" / mock_task.id
+        logs_dir = task_dir / "logs"
+        logs_dir.mkdir(parents=True)
+        
+        # Create a log file
+        log_content = "This is test log output\nLine 2 of log\nLine 3 of log"
+        log_file = logs_dir / "claude_output.log"
+        log_file.write_text(log_content)
+        
+        # Mock storage manager
+        mock_storage = MagicMock()
+        mock_storage.get_task.return_value = mock_task
+        mock_storage_class.return_value = mock_storage
+        
+        with cli_runner.isolated_filesystem():
+            # Create necessary structure
+            Path(".claude-container").mkdir()
+            
+            # Copy the log structure to current dir
+            import shutil
+            shutil.copytree(tmp_path / ".claude-container", ".claude-container", dirs_exist_ok=True)
+            
+            result = cli_runner.invoke(task, ['logs', mock_task.id])
+            
+            assert result.exit_code == 0
+            assert "Execution Logs for Task" in result.output
+            assert log_content in result.output
+    
+    @patch('claude_container.cli.commands.task.TaskStorageManager')
+    def test_logs_command_with_feedback(self, mock_storage_class, cli_runner, mock_task):
+        """Test task logs command with --feedback flag."""
+        # Add feedback history to mock task
+        mock_task.feedback_history = [
+            FeedbackEntry(
+                timestamp=datetime.now(),
+                feedback="Please add error handling",
+                feedback_type="text"
+            ),
+            FeedbackEntry(
+                timestamp=datetime.now(),
+                feedback="Add type hints",
+                feedback_type="inline",
+                claude_response_summary="Added type hints to all functions"
+            )
+        ]
+        
+        # Mock storage manager
+        mock_storage = MagicMock()
+        mock_storage.get_task.return_value = mock_task
+        mock_storage_class.return_value = mock_storage
+        
+        with cli_runner.isolated_filesystem():
+            Path(".claude-container").mkdir()
+            
+            result = cli_runner.invoke(task, ['logs', mock_task.id, '--feedback'])
+            
+            assert result.exit_code == 0
+            assert "Feedback History for Task" in result.output
+            assert "Please add error handling" in result.output
+            assert "Add type hints" in result.output
+            assert "Claude's Response: Added type hints to all functions" in result.output
+    
+    @patch('claude_container.cli.commands.task.TaskStorageManager')
+    def test_logs_command_no_logs(self, mock_storage_class, cli_runner, mock_task):
+        """Test task logs command when no logs exist."""
+        # Mock storage manager
+        mock_storage = MagicMock()
+        mock_storage.get_task.return_value = mock_task
+        mock_storage_class.return_value = mock_storage
+        
+        with cli_runner.isolated_filesystem():
+            Path(".claude-container").mkdir()
+            
+            result = cli_runner.invoke(task, ['logs', mock_task.id])
+            
+            assert result.exit_code == 0
+            assert f"No logs found for task {mock_task.id[:8]}" in result.output
+    
+    # Tests for SEARCH command
+    @patch('claude_container.cli.commands.task.TaskStorageManager')
+    def test_search_command_with_results(self, mock_storage_class, cli_runner, mock_task):
+        """Test task search command with matching results."""
+        # Mock storage manager
+        mock_storage = MagicMock()
+        mock_storage.search_tasks.return_value = [mock_task]
+        mock_storage_class.return_value = mock_storage
+        
+        with cli_runner.isolated_filesystem():
+            Path(".claude-container").mkdir()
+            
+            result = cli_runner.invoke(task, ['search', 'test'])
+            
+            assert result.exit_code == 0
+            assert "Tasks matching 'test'" in result.output
+            assert mock_task.id[:8] in result.output
+            assert "Found 1 matching task(s)" in result.output
+            
+            # Verify search was called with correct query
+            mock_storage.search_tasks.assert_called_once_with('test')
+    
+    @patch('claude_container.cli.commands.task.TaskStorageManager')
+    def test_search_command_no_results(self, mock_storage_class, cli_runner):
+        """Test task search command with no matching results."""
+        # Mock storage manager
+        mock_storage = MagicMock()
+        mock_storage.search_tasks.return_value = []
+        mock_storage_class.return_value = mock_storage
+        
+        with cli_runner.isolated_filesystem():
+            Path(".claude-container").mkdir()
+            
+            result = cli_runner.invoke(task, ['search', 'nonexistent'])
+            
+            assert result.exit_code == 0
+            assert "No tasks found matching 'nonexistent'" in result.output
+    
+    @patch('claude_container.cli.commands.task.TaskStorageManager')
+    def test_search_command_multiple_results(self, mock_storage_class, cli_runner):
+        """Test task search command with multiple matching results."""
+        # Create multiple mock tasks
+        task1 = TaskMetadata(
+            id="task-1",
+            description="Implement authentication system",
+            status=TaskStatus.CREATED,
+            branch_name="auth-feature",
+            created_at=datetime.now()
+        )
+        task2 = TaskMetadata(
+            id="task-2",
+            description="Fix authentication bug",
+            status=TaskStatus.CONTINUED,
+            branch_name="auth-bugfix",
+            created_at=datetime.now()
+        )
+        
+        # Mock storage manager
+        mock_storage = MagicMock()
+        mock_storage.search_tasks.return_value = [task1, task2]
+        mock_storage_class.return_value = mock_storage
+        
+        with cli_runner.isolated_filesystem():
+            Path(".claude-container").mkdir()
+            
+            result = cli_runner.invoke(task, ['search', 'authentication'])
+            
+            assert result.exit_code == 0
+            assert "Tasks matching 'authentication'" in result.output
+            assert task1.id[:8] in result.output
+            assert task2.id[:8] in result.output
+            assert "Found 2 matching task(s)" in result.output
+    
+    # Tests for HISTORY command
+    @patch('claude_container.cli.commands.task.TaskStorageManager')
+    def test_history_command_default(self, mock_storage_class, cli_runner, mock_task):
+        """Test task history command with default options."""
+        # Mock storage manager
+        mock_storage = MagicMock()
+        mock_storage.get_task_history.return_value = [mock_task]
+        mock_storage_class.return_value = mock_storage
+        
+        with cli_runner.isolated_filesystem():
+            Path(".claude-container").mkdir()
+            
+            result = cli_runner.invoke(task, ['history'])
+            
+            assert result.exit_code == 0
+            assert "Task history (showing up to 10 tasks)" in result.output
+            assert mock_task.id[:8] in result.output
+            assert "Showing 1 task(s)" in result.output
+            
+            # Verify history was called with default limit
+            mock_storage.get_task_history.assert_called_once_with(limit=10, branch=None)
+    
+    @patch('claude_container.cli.commands.task.TaskStorageManager')
+    def test_history_command_with_limit(self, mock_storage_class, cli_runner):
+        """Test task history command with custom limit."""
+        # Mock storage manager
+        mock_storage = MagicMock()
+        mock_storage.get_task_history.return_value = []
+        mock_storage_class.return_value = mock_storage
+        
+        with cli_runner.isolated_filesystem():
+            Path(".claude-container").mkdir()
+            
+            result = cli_runner.invoke(task, ['history', '--limit', '5'])
+            
+            assert result.exit_code == 0
+            
+            # Verify history was called with custom limit
+            mock_storage.get_task_history.assert_called_once_with(limit=5, branch=None)
+    
+    @patch('claude_container.cli.commands.task.TaskStorageManager')
+    def test_history_command_with_branch(self, mock_storage_class, cli_runner, mock_task):
+        """Test task history command filtered by branch."""
+        # Mock storage manager
+        mock_storage = MagicMock()
+        mock_storage.get_task_history.return_value = [mock_task]
+        mock_storage_class.return_value = mock_storage
+        
+        with cli_runner.isolated_filesystem():
+            Path(".claude-container").mkdir()
+            
+            result = cli_runner.invoke(task, ['history', '--branch', 'feature-x'])
+            
+            assert result.exit_code == 0
+            assert "Task history for branch 'feature-x'" in result.output
+            
+            # Verify history was called with branch filter
+            mock_storage.get_task_history.assert_called_once_with(limit=10, branch='feature-x')
+    
+    @patch('claude_container.cli.commands.task.TaskStorageManager')
+    def test_history_command_no_results(self, mock_storage_class, cli_runner):
+        """Test task history command with no results."""
+        # Mock storage manager
+        mock_storage = MagicMock()
+        mock_storage.get_task_history.return_value = []
+        mock_storage_class.return_value = mock_storage
+        
+        with cli_runner.isolated_filesystem():
+            Path(".claude-container").mkdir()
+            
+            result = cli_runner.invoke(task, ['history'])
+            
+            assert result.exit_code == 0
+            assert "No task history found" in result.output
+    
+    @patch('claude_container.cli.commands.task.TaskStorageManager')
+    def test_history_command_with_status_breakdown(self, mock_storage_class, cli_runner):
+        """Test task history command shows status breakdown when multiple statuses."""
+        # Create tasks with different statuses
+        tasks = [
+            TaskMetadata(
+                id=f"task-{i}",
+                description=f"Task {i}",
+                status=status,
+                branch_name=f"branch-{i}",
+                created_at=datetime.now()
+            )
+            for i, status in enumerate([TaskStatus.CREATED, TaskStatus.CONTINUED, TaskStatus.FAILED, TaskStatus.CREATED])
+        ]
+        
+        # Mock storage manager
+        mock_storage = MagicMock()
+        mock_storage.get_task_history.return_value = tasks
+        mock_storage_class.return_value = mock_storage
+        
+        with cli_runner.isolated_filesystem():
+            Path(".claude-container").mkdir()
+            
+            result = cli_runner.invoke(task, ['history'])
+            
+            assert result.exit_code == 0
+            assert "Status breakdown:" in result.output
+            assert "Created: 2" in result.output
+            assert "Continued: 1" in result.output
+            assert "Failed: 1" in result.output

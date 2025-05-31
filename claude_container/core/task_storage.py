@@ -358,3 +358,25 @@ class TaskStorageManager:
                 return f.read()
         
         return None
+
+    def get_task_history(self, limit: Optional[int] = None, branch: Optional[str] = None) -> List[TaskMetadata]:
+        """Get task execution history.
+        
+        Args:
+            limit: Maximum number of tasks to return
+            branch: Filter by branch name
+            
+        Returns:
+            List of TaskMetadata instances sorted by creation time (newest first)
+        """
+        tasks = self.list_tasks()
+        
+        # Filter by branch if specified
+        if branch:
+            tasks = [task for task in tasks if task.branch_name == branch]
+        
+        # Apply limit if specified
+        if limit:
+            tasks = tasks[:limit]
+        
+        return tasks
