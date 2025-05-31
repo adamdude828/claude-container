@@ -95,8 +95,6 @@ class TestTaskCommand:
             MagicMock(exit_code=0, output=b""),
             # git checkout -b branch
             MagicMock(exit_code=0, output=b"Switched to a new branch 'test-branch'"),
-            # git pull
-            MagicMock(exit_code=0, output=b"Already up to date"),
             # claude command - first run
             MagicMock(exit_code=0, output=[b"Task completed"]),
             # git status --porcelain
@@ -113,11 +111,25 @@ class TestTaskCommand:
         mock_runner.create_persistent_container.return_value = mock_container
         mock_runner_class.return_value = mock_runner
         
-        # Mock gh pr create
-        mock_subprocess.return_value = MagicMock(
-            returncode=0,
-            stdout="https://github.com/example/repo/pull/123"
-        )
+        # Mock subprocess.run calls
+        def subprocess_side_effect(*args, **kwargs):
+            # Check what command is being run
+            if args[0][0:2] == ["git", "fetch"]:
+                # git fetch
+                return MagicMock(returncode=0)
+            elif args[0][0:3] == ["git", "show-ref", "--verify"]:
+                # Branch doesn't exist (both local and remote)
+                return MagicMock(returncode=1)
+            elif args[0][0:2] == ["gh", "pr"]:
+                # gh pr create
+                return MagicMock(
+                    returncode=0,
+                    stdout="https://github.com/example/repo/pull/123"
+                )
+            else:
+                return MagicMock(returncode=0)
+        
+        mock_subprocess.side_effect = subprocess_side_effect
         
         with cli_runner.isolated_filesystem():
             Path(".claude-container").mkdir()
@@ -139,6 +151,51 @@ class TestTaskCommand:
             # Verify cleanup
             mock_container.stop.assert_called_once()
             mock_container.remove.assert_called_once()
+    
+    @patch('claude_container.cli.commands.task.subprocess.run')
+    @patch('claude_container.cli.commands.task.ContainerRunner')
+    @patch('claude_container.cli.commands.task.TaskStorageManager')
+    @patch('claude_container.cli.commands.task.check_claude_auth')
+    def test_create_branch_exists(self, mock_auth, mock_storage_class, mock_runner_class, mock_subprocess, cli_runner):
+        """Test task create when branch already exists."""
+        mock_auth.return_value = True
+        
+        # Setup storage
+        mock_storage = MagicMock()
+        mock_storage_class.return_value = mock_storage
+        
+        # Setup container runner
+        mock_runner = MagicMock()
+        mock_runner.docker_client.image_exists.return_value = True
+        mock_runner_class.return_value = mock_runner
+        
+        # Mock subprocess.run calls - branch exists on remote
+        def subprocess_side_effect(*args, **kwargs):
+            if args[0][0:2] == ["git", "fetch"]:
+                return MagicMock(returncode=0)
+            elif "refs/remotes/origin" in str(args[0]):
+                # Remote branch exists
+                return MagicMock(returncode=0)
+            else:
+                # Local branch doesn't exist
+                return MagicMock(returncode=1)
+        
+        mock_subprocess.side_effect = subprocess_side_effect
+        
+        with cli_runner.isolated_filesystem():
+            Path(".claude-container").mkdir()
+            result = cli_runner.invoke(
+                task,
+                ['create', '--branch', 'existing-branch'],
+                input="Implement test feature\n"
+            )
+            
+            assert result.exit_code == 1
+            assert "Branch 'existing-branch' already exists" in result.output
+            assert "Use 'claude-container task continue'" in result.output
+            
+            # Verify task was not created
+            mock_storage.create_task.assert_not_called()
     
     # Tests for CONTINUE command
     @patch('claude_container.cli.commands.task.check_claude_auth')
@@ -685,3 +742,103 @@ class TestTaskCommand:
             assert "Created: 2" in result.output
             assert "Continued: 1" in result.output
             assert "Failed: 1" in result.output
+    
+    # Tests for CLEANUP command
+    @patch('claude_container.core.docker_client.DockerClient')
+    def test_cleanup_command_with_containers(self, mock_docker_client_class, cli_runner):
+        """Test cleanup command with containers to remove."""
+        # Mock containers
+        mock_container1 = MagicMock()
+        mock_container1.name = "claude-container-task-123"
+        mock_container1.status = "exited"
+        mock_container1.attrs = {'Created': '2025-05-30T10:00:00.000000000Z'}
+        
+        mock_container2 = MagicMock()
+        mock_container2.name = "claude-container-task-456"
+        mock_container2.status = "running"
+        mock_container2.attrs = {'Created': '2025-05-30T11:00:00.000000000Z'}
+        
+        # Mock Docker client
+        mock_docker_client = MagicMock()
+        mock_docker_client.list_task_containers.return_value = [mock_container1, mock_container2]
+        mock_docker_client_class.return_value = mock_docker_client
+        
+        # Run with force flag to skip confirmation
+        result = cli_runner.invoke(task, ['cleanup', '--force'])
+        
+        assert result.exit_code == 0
+        assert "Found 2 task container(s)" in result.output
+        assert "claude-container-task-123" in result.output
+        assert "claude-container-task-456" in result.output
+        assert "Removing containers..." in result.output
+        assert "Successfully removed 2 container(s)" in result.output
+        
+        # Verify containers were stopped/removed
+        mock_container2.stop.assert_called_once()  # Only running container
+        mock_container1.remove.assert_called_once()
+        mock_container2.remove.assert_called_once()
+    
+    @patch('claude_container.core.docker_client.DockerClient')
+    def test_cleanup_command_no_containers(self, mock_docker_client_class, cli_runner):
+        """Test cleanup command when no containers exist."""
+        # Mock Docker client with no containers
+        mock_docker_client = MagicMock()
+        mock_docker_client.list_task_containers.return_value = []
+        mock_docker_client_class.return_value = mock_docker_client
+        
+        result = cli_runner.invoke(task, ['cleanup'])
+        
+        assert result.exit_code == 0
+        assert "No task containers found" in result.output
+    
+    @patch('claude_container.core.docker_client.DockerClient')
+    def test_cleanup_command_cancelled(self, mock_docker_client_class, cli_runner):
+        """Test cleanup command when user cancels."""
+        # Mock container
+        mock_container = MagicMock()
+        mock_container.name = "claude-container-task-123"
+        mock_container.status = "exited"
+        mock_container.attrs = {'Created': '2025-05-30T10:00:00.000000000Z'}
+        
+        # Mock Docker client
+        mock_docker_client = MagicMock()
+        mock_docker_client.list_task_containers.return_value = [mock_container]
+        mock_docker_client_class.return_value = mock_docker_client
+        
+        # User cancels
+        result = cli_runner.invoke(task, ['cleanup'], input='n\n')
+        
+        assert result.exit_code == 0
+        assert "Found 1 task container(s)" in result.output
+        assert "Cleanup cancelled" in result.output
+        
+        # Verify container was not removed
+        mock_container.remove.assert_not_called()
+    
+    @patch('claude_container.core.docker_client.DockerClient')
+    def test_cleanup_command_with_failures(self, mock_docker_client_class, cli_runner):
+        """Test cleanup command when some containers fail to remove."""
+        # Mock containers
+        mock_container1 = MagicMock()
+        mock_container1.name = "claude-container-task-123"
+        mock_container1.status = "exited"
+        mock_container1.attrs = {'Created': '2025-05-30T10:00:00.000000000Z'}
+        
+        mock_container2 = MagicMock()
+        mock_container2.name = "claude-container-task-456"
+        mock_container2.status = "exited"
+        mock_container2.attrs = {'Created': '2025-05-30T11:00:00.000000000Z'}
+        mock_container2.remove.side_effect = Exception("Permission denied")
+        
+        # Mock Docker client
+        mock_docker_client = MagicMock()
+        mock_docker_client.list_task_containers.return_value = [mock_container1, mock_container2]
+        mock_docker_client_class.return_value = mock_docker_client
+        
+        # Run with force flag
+        result = cli_runner.invoke(task, ['cleanup', '--force'])
+        
+        assert result.exit_code == 0
+        assert "Successfully removed 1 container(s)" in result.output
+        assert "Failed to remove 1 container(s)" in result.output
+        assert "Failed to remove claude-container-task-456" in result.output

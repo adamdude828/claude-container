@@ -7,6 +7,7 @@ import tempfile
 import os
 from pathlib import Path
 from datetime import datetime
+from tabulate import tabulate
 
 from ...core.container_runner import ContainerRunner
 from ...core.constants import CONTAINER_PREFIX, DATA_DIR_NAME, DEFAULT_WORKDIR, LIBERAL_SETTINGS_JSON
@@ -126,43 +127,6 @@ def get_feedback_from_editor(initial_content=""):
             os.unlink(temp_path)
 
 
-def format_task_list_item(task):
-    """Format a task for list display."""
-    # Truncate description to first line, max 50 chars
-    desc_line = task.description.split('\n')[0]
-    if len(desc_line) > 50:
-        desc_line = desc_line[:47] + "..."
-    
-    # Format status with color
-    status_colors = {
-        TaskStatus.CREATED: 'green',
-        TaskStatus.CONTINUED: 'yellow',
-        TaskStatus.FAILED: 'red'
-    }
-    status_display = click.style(
-        task.status.value.upper(), 
-        fg=status_colors.get(task.status, 'white')
-    )
-    
-    # Format dates
-    created = task.created_at.strftime('%Y-%m-%d %H:%M')
-    
-    # Build output line
-    parts = [
-        f"{task.id[:8]}",  # Short ID
-        f"{status_display:<15}",
-        f"{task.branch_name:<30}",
-        f"{desc_line:<50}",
-        f"{created}"
-    ]
-    
-    if task.pr_url:
-        parts.append(click.style(" [PR]", fg='cyan'))
-    
-    if task.continuation_count > 0:
-        parts.append(click.style(f" (cont: {task.continuation_count})", fg='yellow'))
-    
-    return " ".join(parts)
 
 
 @click.group()
@@ -239,6 +203,46 @@ def create(branch, description_file):
         click.echo("\nError: Task description cannot be empty.", err=True)
         sys.exit(1)
     
+    # Check if branch already exists locally or remotely before creating task
+    try:
+        # First fetch to ensure we have latest remote info
+        click.echo("\n📥 Fetching latest remote information...")
+        fetch_result = subprocess.run(
+            ["git", "fetch", "--all"],
+            capture_output=True,
+            text=True,
+            cwd=project_root
+        )
+        
+        if fetch_result.returncode != 0:
+            click.echo("⚠️  Warning: Failed to fetch remote information", err=True)
+        
+        # Check for local branch
+        local_branch_check = subprocess.run(
+            ["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"],
+            capture_output=True,
+            cwd=project_root
+        )
+        
+        # Check for remote branch
+        remote_branch_check = subprocess.run(
+            ["git", "show-ref", "--verify", "--quiet", f"refs/remotes/origin/{branch}"],
+            capture_output=True,
+            cwd=project_root
+        )
+        
+        if local_branch_check.returncode == 0 or remote_branch_check.returncode == 0:
+            click.echo(f"\nError: Branch '{branch}' already exists", err=True)
+            if local_branch_check.returncode == 0:
+                click.echo("  Found as local branch")
+            if remote_branch_check.returncode == 0:
+                click.echo("  Found on remote origin")
+            click.echo("\nUse 'claude-container task continue' to work on an existing task")
+            sys.exit(1)
+    except subprocess.CalledProcessError:
+        # This is fine - branch doesn't exist
+        pass
+    
     # Create task record
     task_metadata = storage_manager.create_task(task_description, branch)
     click.echo(f"\n✅ Created task {task_metadata.id[:8]} on branch '{branch}'")
@@ -284,29 +288,15 @@ def create(branch, description_file):
         # Step 1: Git branch setup
         click.echo(f"\n🌿 Setting up branch '{branch}'...")
         
-        # Attempt to create new branch
+        # Create new branch
         checkout_result = container.exec_run(
             f"git checkout -b {branch}",
             workdir=DEFAULT_WORKDIR
         )
         
         if checkout_result.exit_code != 0:
-            # Branch exists - switch to it
-            checkout_result = container.exec_run(
-                f"git checkout {branch}",
-                workdir=DEFAULT_WORKDIR
-            )
-            
-            if checkout_result.exit_code != 0:
-                click.echo(f"\n❌ Error: Failed to checkout branch\n{checkout_result.output.decode()}", err=True)
-                raise Exception("Failed to checkout branch")
-        
-        # Sync with remote
-        click.echo("📥 Pulling latest changes...")
-        container.exec_run(
-            "git pull",
-            workdir=DEFAULT_WORKDIR
-        )
+            click.echo(f"\n❌ Error: Failed to create branch\n{checkout_result.output.decode()}", err=True)
+            raise Exception("Failed to create branch")
         
         # Step 2: Execute Claude task
         click.echo(f"\n🤖 Running Claude with task:\n   {task_description}")
@@ -713,12 +703,57 @@ def list(status):
         
         if tasks:
             click.echo(f"\n📋 Stored tasks for project '{project_root.name}':")
-            click.echo("=" * 120)
-            click.echo("ID       STATUS          BRANCH                         DESCRIPTION                                        CREATED")
-            click.echo("-" * 120)
             
+            # Prepare table data
+            table_data = []
             for task_item in tasks:
-                click.echo(format_task_list_item(task_item))
+                # Truncate description to first line, max 50 chars
+                desc_line = task_item.description.split('\n')[0]
+                if len(desc_line) > 50:
+                    desc_line = desc_line[:47] + "..."
+                
+                # Format status with color
+                status_colors = {
+                    TaskStatus.CREATED: 'green',
+                    TaskStatus.CONTINUED: 'yellow',
+                    TaskStatus.FAILED: 'red'
+                }
+                status_display = click.style(
+                    task_item.status.value.upper(), 
+                    fg=status_colors.get(task_item.status, 'white')
+                )
+                
+                # Format dates
+                created = task_item.created_at.strftime('%Y-%m-%d %H:%M')
+                
+                # Build row
+                row = [
+                    task_item.id[:8],  # Short ID
+                    status_display,
+                    task_item.branch_name,
+                    desc_line,
+                    created
+                ]
+                
+                # Add PR indicator if exists
+                if task_item.pr_url:
+                    row[3] += click.style(" [PR]", fg='cyan')
+                
+                # Add continuation count if exists
+                if task_item.continuation_count > 0:
+                    row[3] += click.style(f" (cont: {task_item.continuation_count})", fg='yellow')
+                
+                table_data.append(row)
+            
+            # Print table with proper alignment
+            headers = ["ID", "STATUS", "BRANCH", "DESCRIPTION", "CREATED"]
+            table_str = tabulate(
+                table_data, 
+                headers=headers, 
+                tablefmt="simple",
+                colalign=("left", "left", "left", "left", "right")
+            )
+            click.echo(table_str)
         else:
             click.echo(f"\nNo stored tasks found for project '{project_root.name}'")
     
@@ -734,8 +769,9 @@ def list(status):
         
         if containers:
             click.echo("\n🐳 Running task containers:")
-            click.echo("-" * 60)
             
+            # Prepare container table data
+            container_data = []
             for container in containers:
                 status_val = container.status
                 name = container.name
@@ -749,7 +785,16 @@ def list(status):
                 else:
                     status_display = click.style(status_val.upper(), fg='red')
                 
-                click.echo(f"{name:<40} {status_display:<10} {created}")
+                container_data.append([name, status_display, created])
+            
+            # Print container table
+            container_headers = ["CONTAINER NAME", "STATUS", "CREATED"]
+            container_table = tabulate(
+                container_data,
+                headers=container_headers,
+                tablefmt="simple"
+            )
+            click.echo(container_table)
                 
     except RuntimeError as e:
         click.echo(f"\n⚠️  Warning: Could not list Docker containers: {e}", err=True)
@@ -988,12 +1033,57 @@ def search(query):
         return
     
     click.echo(f"\n📋 Tasks matching '{query}':")
-    click.echo("=" * 120)
-    click.echo("ID       STATUS          BRANCH                         DESCRIPTION                                        CREATED")
-    click.echo("-" * 120)
     
+    # Use the same table formatting as list command
+    table_data = []
     for task_item in matching_tasks:
-        click.echo(format_task_list_item(task_item))
+        # Truncate description to first line, max 50 chars
+        desc_line = task_item.description.split('\n')[0]
+        if len(desc_line) > 50:
+            desc_line = desc_line[:47] + "..."
+        
+        # Format status with color
+        status_colors = {
+            TaskStatus.CREATED: 'green',
+            TaskStatus.CONTINUED: 'yellow',
+            TaskStatus.FAILED: 'red'
+        }
+        status_display = click.style(
+            task_item.status.value.upper(), 
+            fg=status_colors.get(task_item.status, 'white')
+        )
+        
+        # Format dates
+        created = task_item.created_at.strftime('%Y-%m-%d %H:%M')
+        
+        # Build row
+        row = [
+            task_item.id[:8],  # Short ID
+            status_display,
+            task_item.branch_name,
+            desc_line,
+            created
+        ]
+        
+        # Add PR indicator if exists
+        if task_item.pr_url:
+            row[3] += click.style(" [PR]", fg='cyan')
+        
+        # Add continuation count if exists
+        if task_item.continuation_count > 0:
+            row[3] += click.style(f" (cont: {task_item.continuation_count})", fg='yellow')
+        
+        table_data.append(row)
+    
+    # Print table with proper alignment
+    headers = ["ID", "STATUS", "BRANCH", "DESCRIPTION", "CREATED"]
+    table_str = tabulate(
+        table_data, 
+        headers=headers, 
+        tablefmt="simple",
+        colalign=("left", "left", "left", "left", "right")
+    )
+    click.echo(table_str)
     
     click.echo(f"\nFound {len(matching_tasks)} matching task(s)")
 
@@ -1028,12 +1118,56 @@ def history(limit, branch):
     else:
         click.echo(f"\n📋 Task history (showing up to {limit} tasks):")
     
-    click.echo("=" * 120)
-    click.echo("ID       STATUS          BRANCH                         DESCRIPTION                                        CREATED")
-    click.echo("-" * 120)
-    
+    # Use the same table formatting as list command
+    table_data = []
     for task_item in tasks:
-        click.echo(format_task_list_item(task_item))
+        # Truncate description to first line, max 50 chars
+        desc_line = task_item.description.split('\n')[0]
+        if len(desc_line) > 50:
+            desc_line = desc_line[:47] + "..."
+        
+        # Format status with color
+        status_colors = {
+            TaskStatus.CREATED: 'green',
+            TaskStatus.CONTINUED: 'yellow',
+            TaskStatus.FAILED: 'red'
+        }
+        status_display = click.style(
+            task_item.status.value.upper(), 
+            fg=status_colors.get(task_item.status, 'white')
+        )
+        
+        # Format dates
+        created = task_item.created_at.strftime('%Y-%m-%d %H:%M')
+        
+        # Build row
+        row = [
+            task_item.id[:8],  # Short ID
+            status_display,
+            task_item.branch_name,
+            desc_line,
+            created
+        ]
+        
+        # Add PR indicator if exists
+        if task_item.pr_url:
+            row[3] += click.style(" [PR]", fg='cyan')
+        
+        # Add continuation count if exists
+        if task_item.continuation_count > 0:
+            row[3] += click.style(f" (cont: {task_item.continuation_count})", fg='yellow')
+        
+        table_data.append(row)
+    
+    # Print table with proper alignment
+    headers = ["ID", "STATUS", "BRANCH", "DESCRIPTION", "CREATED"]
+    table_str = tabulate(
+        table_data, 
+        headers=headers, 
+        tablefmt="simple",
+        colalign=("left", "left", "left", "left", "right")
+    )
+    click.echo(table_str)
     
     # Display summary
     click.echo(f"\nShowing {len(tasks)} task(s)")
@@ -1048,6 +1182,92 @@ def history(limit, branch):
         click.echo("\nStatus breakdown:")
         for status, count in sorted(status_counts.items()):
             click.echo(f"  {status.capitalize()}: {count}")
+
+
+@task.command()
+@click.option('--force', '-f', is_flag=True, help='Force remove without confirmation')
+def cleanup(force):
+    """Remove all hanging task containers for this project"""
+    from ...core.docker_client import DockerClient
+    
+    project_root = Path.cwd()
+    
+    try:
+        docker_client = DockerClient()
+        
+        # List containers for this project
+        containers = docker_client.list_task_containers(
+            name_prefix=f"{CONTAINER_PREFIX}-task",
+            project_name=project_root.name
+        )
+        
+        if not containers:
+            click.echo(f"No task containers found for project '{project_root.name}'")
+            return
+        
+        # Show containers that will be removed
+        click.echo(f"\n🐳 Found {len(containers)} task container(s) for project '{project_root.name}':")
+        
+        # Prepare container table data
+        container_data = []
+        for container in containers:
+            status_val = container.status
+            name = container.name
+            created = container.attrs['Created'][:19]
+            
+            # Color code status
+            if status_val == 'running':
+                status_display = click.style(status_val.upper(), fg='green')
+            elif status_val == 'exited':
+                status_display = click.style(status_val.upper(), fg='yellow')
+            else:
+                status_display = click.style(status_val.upper(), fg='red')
+            
+            container_data.append([name, status_display, created])
+        
+        # Print container table
+        container_headers = ["CONTAINER NAME", "STATUS", "CREATED"]
+        container_table = tabulate(
+            container_data,
+            headers=container_headers,
+            tablefmt="simple"
+        )
+        click.echo(container_table)
+        
+        # Confirm removal unless force flag is used
+        if not force:
+            if not click.confirm("\nDo you want to remove all these containers?"):
+                click.echo("Cleanup cancelled.")
+                return
+        
+        # Remove containers
+        click.echo("\n🧹 Removing containers...")
+        removed_count = 0
+        failed_count = 0
+        
+        for container in containers:
+            try:
+                # Stop container if running
+                if container.status == 'running':
+                    click.echo(f"  Stopping {container.name}...")
+                    container.stop()
+                
+                # Remove container
+                click.echo(f"  Removing {container.name}...")
+                container.remove()
+                removed_count += 1
+            except Exception as e:
+                click.echo(f"  ❌ Failed to remove {container.name}: {e}", err=True)
+                failed_count += 1
+        
+        # Summary
+        click.echo(f"\n✅ Successfully removed {removed_count} container(s)")
+        if failed_count > 0:
+            click.echo(f"⚠️  Failed to remove {failed_count} container(s)", err=True)
+            
+    except RuntimeError as e:
+        click.echo(f"Error: Could not access Docker: {e}", err=True)
+        sys.exit(1)
 
 
 @task.command()
