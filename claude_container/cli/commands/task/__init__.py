@@ -14,6 +14,21 @@ from .history import history
 from .cleanup import cleanup
 from .debug_settings import debug_settings
 
+__all__ = [
+    'task',
+    'create',
+    'continue_task',
+    'list',
+    'show',
+    'delete',
+    'start',
+    'logs',
+    'search',
+    'history',
+    'cleanup',
+    'debug_settings',
+]
+
 
 @click.group()
 def task():
