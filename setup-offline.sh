@@ -72,8 +72,10 @@ echo "✓ Dependencies installed"
 # Download wheel files for offline use
 echo "Downloading dependency wheels for offline use..."
 mkdir -p offline-wheels
-poetry export -f requirements.txt --output requirements.txt --without-hashes
-pip download -r requirements.txt -d offline-wheels/
+
+# Export dependencies using pip freeze from poetry environment
+poetry run pip freeze > requirements.txt
+poetry run pip download -r requirements.txt -d offline-wheels/
 rm requirements.txt
 echo "✓ Dependency wheels downloaded to offline-wheels/"
 
@@ -86,8 +88,20 @@ set -e
 
 echo "Installing Claude Container from offline wheels..."
 
+# Install Poetry if not available
+if ! command -v poetry &> /dev/null; then
+    echo "Installing Poetry..."
+    curl -sSL https://install.python-poetry.org | python3 -
+    export PATH="$HOME/.local/bin:$PATH"
+fi
+
+# Create requirements file from poetry.lock
+poetry lock --no-update
+poetry run pip freeze > requirements.txt
+
 # Install dependencies from wheels
-pip install --no-index --find-links offline-wheels/ -r <(poetry export -f requirements.txt --without-hashes)
+pip install --no-index --find-links offline-wheels/ -r requirements.txt
+rm requirements.txt
 
 # Install the project in development mode
 poetry install --no-deps
