@@ -232,6 +232,8 @@ class TestTaskCommand:
             MagicMock(exit_code=0, output=b""),
             # echo settings > settings.local.json
             MagicMock(exit_code=0, output=b""),
+            # git fetch --all
+            MagicMock(exit_code=0, output=b"Fetching origin"),
             # git checkout branch
             MagicMock(exit_code=0, output=b"Switched to branch 'test-branch'"),
             # git pull
@@ -242,6 +244,10 @@ class TestTaskCommand:
             MagicMock(exit_code=0, output=b"M src/index.js"),
             # claude commit
             MagicMock(exit_code=0, output=[b"Committing changes"]),
+            # git log -1 --pretty=%B
+            MagicMock(exit_code=0, output=b"Update components based on feedback"),
+            # git rev-parse HEAD
+            MagicMock(exit_code=0, output=b"def456"),
             # git push
             MagicMock(exit_code=0, output=b"Branch pushed")
         ]
@@ -263,6 +269,67 @@ class TestTaskCommand:
             mock_storage.add_feedback.assert_called_once_with(
                 'test-task-id-123', 'Fix the bug', 'inline'
             )
+            
+            # Verify logs were saved
+            assert mock_storage.save_task_log.call_count == 2  # claude_output and claude_commit
+    
+    @patch('claude_container.cli.commands.task.TaskStorageManager')
+    @patch('claude_container.cli.commands.task.ContainerRunner')
+    @patch('claude_container.cli.commands.task.check_claude_auth')
+    def test_continue_no_commit(self, mock_auth, mock_runner_class, mock_storage_class, cli_runner, mock_task):
+        """Test task continue when Claude doesn't make a commit."""
+        mock_auth.return_value = True
+        
+        # Mock storage manager
+        mock_storage = MagicMock()
+        mock_storage.get_task.return_value = mock_task
+        mock_storage_class.return_value = mock_storage
+        
+        # Mock ContainerRunner
+        mock_runner = MagicMock()
+        mock_runner.docker_client.image_exists.return_value = True
+        
+        # Mock container
+        mock_container = MagicMock()
+        mock_container.id = "container-456"
+        mock_container.exec_run.side_effect = [
+            # mkdir -p /workspace/.claude
+            MagicMock(exit_code=0, output=b""),
+            # echo settings > settings.local.json
+            MagicMock(exit_code=0, output=b""),
+            # git fetch --all
+            MagicMock(exit_code=0, output=b"Fetching origin"),
+            # git checkout branch
+            MagicMock(exit_code=0, output=b"Switched to branch 'test-branch'"),
+            # git pull
+            MagicMock(exit_code=0, output=b"Already up to date"),
+            # claude command
+            MagicMock(exit_code=0, output=[b"Continuing task"]),
+            # git status --porcelain
+            MagicMock(exit_code=0, output=b"M src/index.js"),
+            # claude commit
+            MagicMock(exit_code=0, output=[b"Claude responded but didn't commit"]),
+            # git log -1 --pretty=%B (fails because no new commit)
+            MagicMock(exit_code=1, output=b"")
+        ]
+        mock_runner.create_persistent_container.return_value = mock_container
+        mock_runner_class.return_value = mock_runner
+        
+        with cli_runner.isolated_filesystem():
+            Path(".claude-container").mkdir()
+            result = cli_runner.invoke(
+                task,
+                ['continue', 'test-task-id-123', '--feedback', 'Fix the bug']
+            )
+            
+            assert result.exit_code == 0
+            assert "Continuing task" in result.output
+            assert "No commit was made" in result.output
+            assert "Claude may not have executed the commit command" in result.output
+            assert "Changes pushed successfully" not in result.output
+            
+            # Verify logs were saved (commit output should still be saved even if no commit made)
+            assert mock_storage.save_task_log.call_count == 2  # claude_output and claude_commit
     
     # Tests for LIST command
     @patch('claude_container.cli.commands.task.TaskStorageManager')

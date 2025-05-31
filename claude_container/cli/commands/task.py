@@ -355,6 +355,9 @@ def create(branch, description_file):
                 click.echo(decoded_chunk, nl=False)
                 commit_output.append(decoded_chunk)
             
+            # Save commit output
+            storage_manager.save_task_log(task_metadata.id, "claude_commit", ''.join(commit_output))
+            
             # Extract commit message from the last commit
             get_commit_msg = container.exec_run(
                 "git log -1 --pretty=%B",
@@ -562,7 +565,17 @@ def continue_task(task_identifier, feedback, feedback_file):
         write_cmd = f"echo '{LIBERAL_SETTINGS_JSON}' > {DEFAULT_WORKDIR}/.claude/settings.local.json"
         container.exec_run(["sh", "-c", write_cmd])
         
-        # Checkout branch and pull latest
+        # Fetch latest remote changes first
+        click.echo("📥 Fetching latest remote changes...")
+        fetch_result = container.exec_run(
+            "git fetch --all",
+            workdir=DEFAULT_WORKDIR
+        )
+        
+        if fetch_result.exit_code != 0:
+            click.echo(f"⚠️  Warning: Failed to fetch remote changes\n{fetch_result.output.decode()}", err=True)
+        
+        # Checkout branch
         click.echo(f"🌿 Checking out branch '{task_metadata.branch_name}'...")
         checkout_result = container.exec_run(
             f"git checkout {task_metadata.branch_name}",
@@ -573,8 +586,12 @@ def continue_task(task_identifier, feedback, feedback_file):
             click.echo(f"\n❌ Error: Failed to checkout branch\n{checkout_result.output.decode()}", err=True)
             raise Exception("Failed to checkout branch")
         
+        # Pull latest changes
         click.echo("📥 Pulling latest changes...")
-        container.exec_run("git pull", workdir=DEFAULT_WORKDIR)
+        pull_result = container.exec_run("git pull", workdir=DEFAULT_WORKDIR)
+        
+        if pull_result.exit_code != 0:
+            click.echo(f"⚠️  Warning: Failed to pull latest changes\n{pull_result.output.decode()}", err=True)
         
         # Build context for Claude
         full_context = f"""You are continuing work on a task. Here is the original task description:
@@ -630,6 +647,7 @@ Please continue working on this task based on the feedback provided."""
             click.echo("\n🤖 Asking Claude to commit the changes...")
             click.echo("-" * 60 + "\n")
             
+            commit_output = []
             commit_result = container.exec_run(
                 ["claude", "--model=sonnet", "-p", commit_prompt],
                 workdir=DEFAULT_WORKDIR,
@@ -637,19 +655,49 @@ Please continue working on this task based on the feedback provided."""
             )
             
             for chunk in commit_result.output:
-                click.echo(chunk.decode(), nl=False)
+                decoded_chunk = chunk.decode()
+                click.echo(decoded_chunk, nl=False)
+                commit_output.append(decoded_chunk)
             
-            # Push changes
-            click.echo(f"\n\n📤 Pushing changes to branch '{task_metadata.branch_name}'...")
-            push_result = container.exec_run(
-                "git push",
+            # Save commit output
+            storage_manager.save_task_log(
+                task_metadata.id,
+                f"claude_commit_cont_{task_metadata.continuation_count}",
+                ''.join(commit_output)
+            )
+            
+            # Check if a commit was actually made
+            get_commit_msg = container.exec_run(
+                "git log -1 --pretty=%B",
                 workdir=DEFAULT_WORKDIR
             )
             
-            if push_result.exit_code != 0:
-                click.echo(f"\n⚠️  Warning: Failed to push\n{push_result.output.decode()}", err=True)
+            if get_commit_msg.exit_code == 0:
+                click.echo("\n\n✅ Changes committed successfully")
+                
+                # Get commit hash
+                get_commit_hash = container.exec_run(
+                    "git rev-parse HEAD",
+                    workdir=DEFAULT_WORKDIR
+                )
+                if get_commit_hash.exit_code == 0:
+                    commit_hash = get_commit_hash.output.decode().strip()
+                    storage_manager.update_task(task_metadata.id, commit_hash=commit_hash)
+                
+                # Push changes
+                click.echo(f"\n📤 Pushing changes to branch '{task_metadata.branch_name}'...")
+                push_result = container.exec_run(
+                    "git push",
+                    workdir=DEFAULT_WORKDIR
+                )
+                
+                if push_result.exit_code != 0:
+                    click.echo(f"\n⚠️  Warning: Failed to push\n{push_result.output.decode()}", err=True)
+                else:
+                    click.echo("✅ Changes pushed successfully")
             else:
-                click.echo("✅ Changes pushed successfully")
+                click.echo("\n\n⚠️  Warning: No commit was made")
+                click.echo("ℹ️  Claude may not have executed the commit command")
         
         # Update task status
         storage_manager.update_task(task_metadata.id, 
@@ -726,32 +774,40 @@ def list(status):
                 # Format dates
                 created = task_item.created_at.strftime('%Y-%m-%d %H:%M')
                 
+                # Format PR URL if exists
+                pr_display = ""
+                if task_item.pr_url:
+                    # Extract PR number from URL (e.g., https://github.com/owner/repo/pull/123)
+                    pr_parts = task_item.pr_url.split('/')
+                    if len(pr_parts) >= 2 and pr_parts[-2] == 'pull':
+                        pr_number = pr_parts[-1]
+                        pr_display = click.style(f"PR #{pr_number}", fg='cyan')
+                    else:
+                        pr_display = click.style("PR", fg='cyan')
+                
+                # Add continuation count to description if exists
+                if task_item.continuation_count > 0:
+                    desc_line += click.style(f" (cont: {task_item.continuation_count})", fg='yellow')
+                
                 # Build row
                 row = [
                     task_item.id[:8],  # Short ID
                     status_display,
                     task_item.branch_name,
                     desc_line,
-                    created
+                    created,
+                    pr_display
                 ]
-                
-                # Add PR indicator if exists
-                if task_item.pr_url:
-                    row[3] += click.style(" [PR]", fg='cyan')
-                
-                # Add continuation count if exists
-                if task_item.continuation_count > 0:
-                    row[3] += click.style(f" (cont: {task_item.continuation_count})", fg='yellow')
                 
                 table_data.append(row)
             
             # Print table with proper alignment
-            headers = ["ID", "STATUS", "BRANCH", "DESCRIPTION", "CREATED"]
+            headers = ["ID", "STATUS", "BRANCH", "DESCRIPTION", "CREATED", "PR"]
             table_str = tabulate(
                 table_data, 
                 headers=headers, 
                 tablefmt="simple",
-                colalign=("left", "left", "left", "left", "right")
+                colalign=("left", "left", "left", "left", "right", "left")
             )
             click.echo(table_str)
         else:
@@ -926,7 +982,9 @@ def start():
 @click.argument('task_id')
 @click.option('--follow', '-f', is_flag=True, help='Follow log output')
 @click.option('--feedback', is_flag=True, help='Show feedback history instead of execution logs')
-def logs(task_id, follow, feedback):
+@click.option('--log-type', '-t', help='Specify log type to view (output/commit/all)')
+@click.option('--continuation', '-c', type=int, help='View logs from specific continuation number')
+def logs(task_id, follow, feedback, log_type, continuation):
     """View task execution logs"""
     project_root = Path.cwd()
     data_dir = project_root / DATA_DIR_NAME
@@ -979,22 +1037,99 @@ def logs(task_id, follow, feedback):
         click.echo(f"No logs found for task {task_id[:8]}")
         return
     
-    # Look for log files
-    claude_log = logs_dir / "claude_output.log"
-    execution_log = logs_dir / "execution.log"
+    # Find all log files
+    log_files = sorted(logs_dir.glob("*.log"))
     
-    log_file = None
-    if claude_log.exists():
-        log_file = claude_log
-    elif execution_log.exists():
-        log_file = execution_log
-    else:
+    if not log_files:
         click.echo(f"No log files found in {logs_dir}")
         return
     
-    click.echo(f"\n📋 Execution Logs for Task {task_id[:8]}:")
-    click.echo(f"   Log file: {log_file.name}")
-    click.echo("=" * 80)
+    # Filter by continuation if specified
+    if continuation is not None:
+        if continuation == 0:
+            # Initial task logs (no continuation suffix)
+            log_files = [f for f in log_files if not f.name.endswith(f"_cont_{continuation}.log") and "cont_" not in f.name]
+        else:
+            # Specific continuation logs
+            log_files = [f for f in log_files if f.name.endswith(f"_cont_{continuation}.log")]
+        
+        if not log_files:
+            click.echo(f"No logs found for continuation {continuation}")
+            return
+    
+    # Group logs by type
+    output_logs = []
+    commit_logs = []
+    other_logs = []
+    
+    for log_file in log_files:
+        if "claude_output" in log_file.name:
+            output_logs.append(log_file)
+        elif "claude_commit" in log_file.name:
+            commit_logs.append(log_file)
+        else:
+            other_logs.append(log_file)
+    
+    # If there's only one log file, just display it
+    if len(log_files) == 1:
+        log_file = log_files[0]
+        click.echo(f"\n📋 Execution Logs for Task {task_id[:8]}:")
+        click.echo(f"   Log file: {log_file.name}")
+        click.echo("=" * 80)
+    else:
+        # Show available logs
+        click.echo(f"\n📋 Available Logs for Task {task_id[:8]}:")
+        click.echo("=" * 80)
+        
+        if output_logs:
+            click.echo("\n🤖 Claude Output Logs:")
+            for log in output_logs:
+                click.echo(f"   - {log.name}")
+        
+        if commit_logs:
+            click.echo("\n💾 Commit Logs:")
+            for log in commit_logs:
+                click.echo(f"   - {log.name}")
+        
+        if other_logs:
+            click.echo("\n📄 Other Logs:")
+            for log in other_logs:
+                click.echo(f"   - {log.name}")
+        
+        # Determine which log to show based on log_type option
+        if log_type == 'all':
+            # Show all logs concatenated
+            click.echo("\n📖 Showing all logs in chronological order")
+            click.echo("-" * 80)
+            for log in log_files:
+                click.echo(f"\n\n{'='*20} {log.name} {'='*20}")
+                try:
+                    with open(log, 'r') as f:
+                        click.echo(f.read())
+                except Exception as e:
+                    click.echo(f"Error reading {log.name}: {e}")
+            return
+        elif log_type == 'commit':
+            if commit_logs:
+                log_file = commit_logs[-1]  # Latest commit log
+            else:
+                click.echo("No commit logs found")
+                return
+        elif log_type == 'output':
+            if output_logs:
+                log_file = output_logs[-1]  # Latest output log
+            else:
+                click.echo("No output logs found")
+                return
+        else:
+            # Default: prioritize the most recent output log
+            if output_logs:
+                log_file = output_logs[-1]  # Latest output log
+            else:
+                log_file = log_files[-1]  # Just show the latest log
+        
+        click.echo(f"\n📖 Showing: {log_file.name}")
+        click.echo("-" * 80)
     
     if follow:
         # Follow mode - tail the log file
@@ -1056,32 +1191,40 @@ def search(query):
         # Format dates
         created = task_item.created_at.strftime('%Y-%m-%d %H:%M')
         
+        # Format PR URL if exists
+        pr_display = ""
+        if task_item.pr_url:
+            # Extract PR number from URL (e.g., https://github.com/owner/repo/pull/123)
+            pr_parts = task_item.pr_url.split('/')
+            if len(pr_parts) >= 2 and pr_parts[-2] == 'pull':
+                pr_number = pr_parts[-1]
+                pr_display = click.style(f"PR #{pr_number}", fg='cyan')
+            else:
+                pr_display = click.style("PR", fg='cyan')
+        
+        # Add continuation count to description if exists
+        if task_item.continuation_count > 0:
+            desc_line += click.style(f" (cont: {task_item.continuation_count})", fg='yellow')
+        
         # Build row
         row = [
             task_item.id[:8],  # Short ID
             status_display,
             task_item.branch_name,
             desc_line,
-            created
+            created,
+            pr_display
         ]
-        
-        # Add PR indicator if exists
-        if task_item.pr_url:
-            row[3] += click.style(" [PR]", fg='cyan')
-        
-        # Add continuation count if exists
-        if task_item.continuation_count > 0:
-            row[3] += click.style(f" (cont: {task_item.continuation_count})", fg='yellow')
         
         table_data.append(row)
     
     # Print table with proper alignment
-    headers = ["ID", "STATUS", "BRANCH", "DESCRIPTION", "CREATED"]
+    headers = ["ID", "STATUS", "BRANCH", "DESCRIPTION", "CREATED", "PR"]
     table_str = tabulate(
         table_data, 
         headers=headers, 
         tablefmt="simple",
-        colalign=("left", "left", "left", "left", "right")
+        colalign=("left", "left", "left", "left", "right", "left")
     )
     click.echo(table_str)
     
@@ -1140,32 +1283,40 @@ def history(limit, branch):
         # Format dates
         created = task_item.created_at.strftime('%Y-%m-%d %H:%M')
         
+        # Format PR URL if exists
+        pr_display = ""
+        if task_item.pr_url:
+            # Extract PR number from URL (e.g., https://github.com/owner/repo/pull/123)
+            pr_parts = task_item.pr_url.split('/')
+            if len(pr_parts) >= 2 and pr_parts[-2] == 'pull':
+                pr_number = pr_parts[-1]
+                pr_display = click.style(f"PR #{pr_number}", fg='cyan')
+            else:
+                pr_display = click.style("PR", fg='cyan')
+        
+        # Add continuation count to description if exists
+        if task_item.continuation_count > 0:
+            desc_line += click.style(f" (cont: {task_item.continuation_count})", fg='yellow')
+        
         # Build row
         row = [
             task_item.id[:8],  # Short ID
             status_display,
             task_item.branch_name,
             desc_line,
-            created
+            created,
+            pr_display
         ]
-        
-        # Add PR indicator if exists
-        if task_item.pr_url:
-            row[3] += click.style(" [PR]", fg='cyan')
-        
-        # Add continuation count if exists
-        if task_item.continuation_count > 0:
-            row[3] += click.style(f" (cont: {task_item.continuation_count})", fg='yellow')
         
         table_data.append(row)
     
     # Print table with proper alignment
-    headers = ["ID", "STATUS", "BRANCH", "DESCRIPTION", "CREATED"]
+    headers = ["ID", "STATUS", "BRANCH", "DESCRIPTION", "CREATED", "PR"]
     table_str = tabulate(
         table_data, 
         headers=headers, 
         tablefmt="simple",
-        colalign=("left", "left", "left", "left", "right")
+        colalign=("left", "left", "left", "left", "right", "left")
     )
     click.echo(table_str)
     
