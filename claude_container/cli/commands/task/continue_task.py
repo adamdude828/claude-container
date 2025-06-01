@@ -98,7 +98,7 @@ def continue_task(task_identifier, feedback, feedback_file):
         sys.exit(1)
     
     # Verify container image exists
-    if not container_runner.docker_client.image_exists(image_name):
+    if not container_runner.docker_service.image_exists(image_name):
         click.echo(f"Error: Container image '{image_name}' not found.", err=True)
         sys.exit(1)
     

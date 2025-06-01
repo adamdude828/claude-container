@@ -29,7 +29,7 @@ class TestAuthCheckCommand:
         """Test auth_check when image doesn't exist."""
         # Mock ContainerRunner
         mock_runner = MagicMock()
-        mock_runner.docker_client.image_exists.return_value = False
+        mock_runner.docker_service.image_exists.return_value = False
         mock_runner_class.return_value = mock_runner
         
         with cli_runner.isolated_filesystem():
@@ -45,12 +45,12 @@ class TestAuthCheckCommand:
         """Test auth_check when authenticated."""
         # Mock ContainerRunner
         mock_runner = MagicMock()
-        mock_runner.docker_client.image_exists.return_value = True
+        mock_runner.docker_service.image_exists.return_value = True
         
         # Mock container execution for auth check
         mock_container = MagicMock()
         mock_container.wait.return_value = {'StatusCode': 0}
-        mock_runner.docker_client.client.containers.run.return_value = mock_container
+        mock_runner.docker_service.run_container.return_value = mock_container
         mock_runner._get_container_config.return_value = {
             'image': 'test-image',
             'volumes': {},
@@ -74,12 +74,12 @@ class TestAuthCheckCommand:
         """Test auth_check when not authenticated."""
         # Mock ContainerRunner
         mock_runner = MagicMock()
-        mock_runner.docker_client.image_exists.return_value = True
+        mock_runner.docker_service.image_exists.return_value = True
         
         # Mock container execution to simulate auth failure
         mock_container = MagicMock()
         mock_container.wait.return_value = {'StatusCode': 1}
-        mock_runner.docker_client.client.containers.run.return_value = mock_container
+        mock_runner.docker_service.run_container.return_value = mock_container
         mock_runner._get_container_config.return_value = {
             'image': 'test-image',
             'volumes': {},
@@ -118,10 +118,10 @@ class TestAuthCheckCommand:
         
         # Mock ContainerRunner
         mock_runner = MagicMock()
-        mock_runner.docker_client.image_exists.return_value = True
+        mock_runner.docker_service.image_exists.return_value = True
         mock_container = MagicMock()
         mock_container.wait.return_value = {'StatusCode': 0}
-        mock_runner.docker_client.client.containers.run.return_value = mock_container
+        mock_runner.docker_service.run_container.return_value = mock_container
         mock_runner._get_container_config.return_value = {'test': 'config'}
         mock_runner_class.return_value = mock_runner
         
@@ -142,10 +142,10 @@ class TestAuthCheckCommand:
         
         # Mock ContainerRunner
         mock_runner = MagicMock()
-        mock_runner.docker_client.image_exists.return_value = True
+        mock_runner.docker_service.image_exists.return_value = True
         mock_container = MagicMock()
         mock_container.wait.return_value = {'StatusCode': 1}
-        mock_runner.docker_client.client.containers.run.return_value = mock_container
+        mock_runner.docker_service.run_container.return_value = mock_container
         mock_runner._get_container_config.return_value = {'test': 'config'}
         mock_runner_class.return_value = mock_runner
         
