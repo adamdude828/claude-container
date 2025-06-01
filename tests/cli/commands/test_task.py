@@ -805,8 +805,8 @@ class TestTaskCommand:
             assert "Failed: 1" in result.output
     
     # Tests for CLEANUP command
-    @patch('claude_container.cli.commands.task.cleanup.DockerClient')
-    def test_cleanup_command_with_containers(self, mock_docker_client_class, cli_runner):
+    @patch('claude_container.cli.commands.task.cleanup.DockerService')
+    def test_cleanup_command_with_containers(self, mock_docker_service_class, cli_runner):
         """Test cleanup command with containers to remove."""
         # Mock containers
         mock_container1 = MagicMock()
@@ -819,10 +819,10 @@ class TestTaskCommand:
         mock_container2.status = "running"
         mock_container2.attrs = {'Created': '2025-05-30T11:00:00.000000000Z'}
         
-        # Mock Docker client
-        mock_docker_client = MagicMock()
-        mock_docker_client.list_task_containers.return_value = [mock_container1, mock_container2]
-        mock_docker_client_class.return_value = mock_docker_client
+        # Mock Docker service
+        mock_docker_service = MagicMock()
+        mock_docker_service.list_containers.return_value = [mock_container1, mock_container2]
+        mock_docker_service_class.return_value = mock_docker_service
         
         # Run with force flag to skip confirmation
         result = cli_runner.invoke(task, ['cleanup', '--force'])
@@ -836,24 +836,23 @@ class TestTaskCommand:
         
         # Verify containers were stopped/removed
         mock_container2.stop.assert_called_once()  # Only running container
-        mock_container1.remove.assert_called_once()
-        mock_container2.remove.assert_called_once()
+        assert mock_docker_service.remove_container.call_count == 2
     
-    @patch('claude_container.cli.commands.task.cleanup.DockerClient')
-    def test_cleanup_command_no_containers(self, mock_docker_client_class, cli_runner):
+    @patch('claude_container.cli.commands.task.cleanup.DockerService')
+    def test_cleanup_command_no_containers(self, mock_docker_service_class, cli_runner):
         """Test cleanup command when no containers exist."""
-        # Mock Docker client with no containers
-        mock_docker_client = MagicMock()
-        mock_docker_client.list_task_containers.return_value = []
-        mock_docker_client_class.return_value = mock_docker_client
+        # Mock Docker service with no containers
+        mock_docker_service = MagicMock()
+        mock_docker_service.list_containers.return_value = []
+        mock_docker_service_class.return_value = mock_docker_service
         
         result = cli_runner.invoke(task, ['cleanup'])
         
         assert result.exit_code == 0
         assert "No task containers found" in result.output
     
-    @patch('claude_container.cli.commands.task.cleanup.DockerClient')
-    def test_cleanup_command_cancelled(self, mock_docker_client_class, cli_runner):
+    @patch('claude_container.cli.commands.task.cleanup.DockerService')
+    def test_cleanup_command_cancelled(self, mock_docker_service_class, cli_runner):
         """Test cleanup command when user cancels."""
         # Mock container
         mock_container = MagicMock()
@@ -861,10 +860,10 @@ class TestTaskCommand:
         mock_container.status = "exited"
         mock_container.attrs = {'Created': '2025-05-30T10:00:00.000000000Z'}
         
-        # Mock Docker client
-        mock_docker_client = MagicMock()
-        mock_docker_client.list_task_containers.return_value = [mock_container]
-        mock_docker_client_class.return_value = mock_docker_client
+        # Mock Docker service
+        mock_docker_service = MagicMock()
+        mock_docker_service.list_containers.return_value = [mock_container]
+        mock_docker_service_class.return_value = mock_docker_service
         
         # User cancels
         result = cli_runner.invoke(task, ['cleanup'], input='n\n')
@@ -874,10 +873,10 @@ class TestTaskCommand:
         assert "Cleanup cancelled" in result.output
         
         # Verify container was not removed
-        mock_container.remove.assert_not_called()
+        mock_docker_service.remove_container.assert_not_called()
     
-    @patch('claude_container.cli.commands.task.cleanup.DockerClient')
-    def test_cleanup_command_with_failures(self, mock_docker_client_class, cli_runner):
+    @patch('claude_container.cli.commands.task.cleanup.DockerService')
+    def test_cleanup_command_with_failures(self, mock_docker_service_class, cli_runner):
         """Test cleanup command when some containers fail to remove."""
         # Mock containers
         mock_container1 = MagicMock()
@@ -889,12 +888,13 @@ class TestTaskCommand:
         mock_container2.name = "claude-container-task-456"
         mock_container2.status = "exited"
         mock_container2.attrs = {'Created': '2025-05-30T11:00:00.000000000Z'}
-        mock_container2.remove.side_effect = Exception("Permission denied")
         
-        # Mock Docker client
-        mock_docker_client = MagicMock()
-        mock_docker_client.list_task_containers.return_value = [mock_container1, mock_container2]
-        mock_docker_client_class.return_value = mock_docker_client
+        # Mock Docker service
+        mock_docker_service = MagicMock()
+        mock_docker_service.list_containers.return_value = [mock_container1, mock_container2]
+        # First remove succeeds, second fails
+        mock_docker_service.remove_container.side_effect = [None, Exception("Permission denied")]
+        mock_docker_service_class.return_value = mock_docker_service
         
         # Run with force flag
         result = cli_runner.invoke(task, ['cleanup', '--force'])
