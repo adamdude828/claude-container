@@ -411,8 +411,8 @@ class TestOpenInEditor:
             with mock.patch('builtins.open', mock.mock_open(read_data="Content")):
                 result = open_in_editor("Test")
         
-        # Should use nano as fallback
-        assert mock_run.call_args[0][0][0] == 'nano'
+        # Should use vim as fallback
+        assert mock_run.call_args[0][0][0] == 'vim'
 
 
 class TestCleanupContainer:
