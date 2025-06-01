@@ -10,7 +10,7 @@ from ..core.constants import CLAUDE_CODE_PATHS, PROJECT_PATTERNS
 
 class PathFinder:
     """Utility class for finding paths and executables."""
-    
+
     @staticmethod
     def find_claude_code() -> Optional[str]:
         """Try to find Claude Code executable."""
@@ -18,7 +18,7 @@ class PathFinder:
         for path in CLAUDE_CODE_PATHS:
             if os.path.exists(path):
                 return path
-        
+
         # Try which command
         try:
             result = subprocess.run(['which', 'claude'], capture_output=True, text=True)
@@ -26,15 +26,15 @@ class PathFinder:
                 return result.stdout.strip()
         except:
             pass
-        
+
         # Check in PATH
         for path_dir in os.environ.get('PATH', '').split(':'):
             path = Path(path_dir) / 'claude'
             if path.exists():
                 return str(path)
-        
+
         return None
-    
+
     @staticmethod
     def detect_project_type(project_root: Path) -> str:
         """Detect the type of project based on files present."""
@@ -43,7 +43,7 @@ class PathFinder:
                 if (project_root / pattern).exists():
                     return project_type
         return "default"
-    
+
     @staticmethod
     def check_git_ssh_origin(project_root: Path) -> bool:
         """Check if Git remote origin uses SSH."""

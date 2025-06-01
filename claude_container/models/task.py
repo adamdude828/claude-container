@@ -2,7 +2,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import Optional
 
 
 class TaskStatus(Enum):
@@ -35,6 +35,6 @@ class TaskMetadata:
     pr_url: Optional[str] = None  # GitHub PR URL (if created)
     commit_hash: Optional[str] = None  # Git commit hash (if committed)
     error_message: Optional[str] = None  # Error details (if failed)
-    feedback_history: List[FeedbackEntry] = field(default_factory=list)  # All feedback provided
+    feedback_history: list[FeedbackEntry] = field(default_factory=list)  # All feedback provided
     last_continued_at: Optional[datetime] = None  # When task was last continued
     continuation_count: int = 0  # Number of times continued

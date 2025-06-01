@@ -33,6 +33,9 @@ poetry run ruff check claude_container/
 # Run type checks  
 poetry run mypy claude_container/
 
+# Check file length limits (max 400 lines)
+python scripts/check_file_length.py
+
 # Run tests
 poetry run pytest
 ```

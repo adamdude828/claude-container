@@ -79,24 +79,24 @@ def generate_dockerfile(config):
     """Generate Dockerfile from configuration."""
     # Use the node based template
     template = NODE_DOCKERFILE
-    
+
     # Process runtime overrides - for MVP, we only support Node
     runtime_overrides = []
     for runtime in config.runtime_versions:
         if runtime.name == "node":
             # Node version is controlled by the base image, so just add a comment
             runtime_overrides.append(f"# Node version: {runtime.version} (controlled by base image)")
-    
+
     # Process environment variables
     env_vars = []
     for key, value in config.env_vars.items():
         env_vars.append(f'ENV {key}="{value}"')
-    
+
     # Process custom commands
     custom_commands = []
     for command in config.custom_commands:
         custom_commands.append(f"RUN {command}")
-    
+
     return template.format(
         runtime_overrides="\n".join(runtime_overrides) if runtime_overrides else "# No runtime overrides",
         env_vars="\n".join(env_vars) if env_vars else "# No custom environment variables",

@@ -2,7 +2,7 @@
 
 from .config import ClaudeConfig
 from .container import ContainerConfig, RuntimeVersion
-from .task import TaskMetadata, TaskStatus, FeedbackEntry
+from .task import FeedbackEntry, TaskMetadata, TaskStatus
 
 __all__ = [
     'ClaudeConfig',

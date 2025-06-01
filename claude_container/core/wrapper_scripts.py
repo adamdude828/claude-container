@@ -30,7 +30,7 @@ if [[ -n $(git status -s) ]]; then
     echo "Committing changes..."
     git add -A
     git commit -m "Claude task update on branch $BRANCH_NAME"
-    
+
     echo "Pushing changes..."
     git push origin $BRANCH_NAME
 else

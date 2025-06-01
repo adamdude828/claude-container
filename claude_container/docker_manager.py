@@ -1,12 +1,13 @@
-import docker
 import json
 import os
+import re
 import shutil
 import subprocess
-import re
-from pathlib import Path
-from typing import List, Optional, Dict, Any
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Optional
+
+import docker
 
 
 class DockerManager:
@@ -26,32 +27,32 @@ class DockerManager:
                 raise RuntimeError(f"Failed to connect to Docker: {e}") from e
         self.config_file = data_dir / 'container_config.json'
         self.image_name = f"claude-container-{project_root.name}".lower()
-    
-    
-    
-    def run_container(self, command: List[str]):
+
+
+
+    def run_container(self, command: list[str]):
         """Run container with Claude Code installed"""
         volumes = {
             str(self.project_root): {'bind': '/workspace', 'mode': 'rw'},
             str(Path.home() / '.ssh'): {'bind': '/root/.ssh', 'mode': 'ro'},
         }
-        
+
         # Mount Claude configuration if it exists
         claude_config = Path.home() / '.claude.json'
         if claude_config.exists():
             volumes[str(claude_config)] = {'bind': '/root/.claude.json', 'mode': 'ro'}
-        
+
         # Mount GitHub CLI config if it exists
         gh_config_dir = Path.home() / '.config' / 'gh'
         if gh_config_dir.exists():
             volumes[str(gh_config_dir)] = {'bind': '/root/.config/gh', 'mode': 'ro'}
-        
+
         # Prepare command
         if command:
             cmd = ' '.join(command)
         else:
             cmd = '/bin/bash'
-        
+
         container = self.client.containers.run(
             self.image_name,
             cmd,
@@ -61,7 +62,7 @@ class DockerManager:
             stdin_open=True,
             detach=True
         )
-        
+
         # Attach to container
         try:
             for line in container.attach(stream=True, logs=True):
@@ -71,20 +72,20 @@ class DockerManager:
         finally:
             container.stop()
             container.remove()
-    
+
     def _generate_default_dockerfile(self, existing_dockerfile: str = None) -> str:
         """Generate a default Dockerfile for Claude Code"""
         # Detect project type
         is_python = (self.project_root / 'requirements.txt').exists() or (self.project_root / 'pyproject.toml').exists()
         is_node = (self.project_root / 'package.json').exists()
-        
+
         if is_python:
             base_image = "python:3.11"
         elif is_node:
             base_image = "node:20"
         else:
             base_image = "ubuntu:22.04"
-        
+
         dockerfile = f"""FROM {base_image}
 
 # Install system dependencies
@@ -105,7 +106,7 @@ RUN apt-get update && apt-get install -y \\
     apt-get install -y nodejs
 
 """
-        
+
         dockerfile += """# Install Claude Code globally
 RUN npm install -g @anthropic-ai/claude-code
 
@@ -126,7 +127,7 @@ WORKDIR /workspace
 CMD ["claude"]
 """
         return dockerfile
-    
+
     def find_claude_code(self) -> Optional[str]:
         """Try to find Claude Code executable"""
         # Common locations
@@ -136,11 +137,11 @@ CMD ["claude"]
             '/usr/bin/claude',
             '/Applications/Claude Code.app/Contents/MacOS/Claude Code',
         ]
-        
+
         for path in paths:
             if os.path.exists(path):
                 return path
-        
+
         # Try which command
         try:
             result = subprocess.run(['which', 'claude'], capture_output=True, text=True)
@@ -148,20 +149,20 @@ CMD ["claude"]
                 return result.stdout.strip()
         except:
             pass
-        
+
         # Check in PATH
         for path_dir in os.environ.get('PATH', '').split(':'):
             path = Path(path_dir) / 'claude'
             if path.exists():
                 return path
-        
+
         return None
-    
+
     def build_with_claude(self, claude_code_path: str, force_rebuild: bool = False, existing_dockerfile: str = None) -> str:
         """Use Claude Code to generate and build Dockerfile"""
         if not force_rebuild and self._image_exists():
             return self.image_name
-        
+
         # If force rebuild, remove existing image
         if force_rebuild and self._image_exists():
             try:
@@ -169,18 +170,18 @@ CMD ["claude"]
                 self.client.images.remove(self.image_name, force=True)
             except Exception as e:
                 print(f"Warning: Could not remove existing image: {e}")
-        
+
         # Manage Claude Code permissions
         claude_config_path = Path.home() / '.claude.json'
         backup_config_path = Path.home() / '.claude.json.backup'
         original_config = None
-        
+
         try:
             # Backup existing config if it exists
             if claude_config_path.exists():
                 original_config = claude_config_path.read_text()
                 shutil.copy2(claude_config_path, backup_config_path)
-            
+
             # Create temporary config with Docker permissions
             temp_config = {
                 "toolPermissions": {
@@ -197,7 +198,7 @@ CMD ["claude"]
                     ]
                 }
             }
-            
+
             # If original config exists, merge permissions
             if original_config:
                 try:
@@ -213,18 +214,18 @@ CMD ["claude"]
                             temp_config["toolPermissions"]["deny"] = original_json["toolPermissions"]["deny"]
                 except:
                     pass  # If parsing fails, use our default config
-            
+
             # Write temporary config
             claude_config_path.write_text(json.dumps(temp_config, indent=2))
             print("Temporarily enabled Docker permissions for Claude Code")
-            
+
             # Create temporary Dockerfile path
             temp_dockerfile = self.data_dir / 'Dockerfile.claude'
-            
+
             # Prepare prompt for Claude
             prompt = f"""Generate a Dockerfile for running Claude Code in this project.
 
-IMPORTANT: 
+IMPORTANT:
 - This container will run Claude Code (installed via npm)
 - The project directory will be mounted at /workspace
 - DO NOT install project dependencies (npm install, pip install, etc) - they will be copied from host
@@ -264,23 +265,23 @@ Output ONLY the final working Dockerfile content after testing, no explanations 
                 text=True,
                 timeout=600  # 10 minutes timeout for testing builds
             )
-            
+
             if result.returncode != 0:
                 raise RuntimeError(f"Claude Code failed to generate Dockerfile: {result.stderr}")
-            
+
             # Extract Dockerfile content from output
             dockerfile_content = result.stdout.strip()
-            
+
             # Clean up markdown formatting if present
             if '```dockerfile' in dockerfile_content or '```Dockerfile' in dockerfile_content:
                 # Extract content between ```dockerfile and ```
                 match = re.search(r'```[Dd]ockerfile\s*\n(.*?)```', dockerfile_content, re.DOTALL)
                 if match:
                     dockerfile_content = match.group(1).strip()
-            
+
             # Write the Dockerfile
             temp_dockerfile.write_text(dockerfile_content)
-            
+
             # Build image using generated Dockerfile
             try:
                 self.client.images.build(
@@ -289,7 +290,7 @@ Output ONLY the final working Dockerfile content after testing, no explanations 
                     tag=self.image_name,
                     rm=True
                 )
-                
+
                 # Save config
                 self._save_config({
                     'type': 'claude-generated',
@@ -303,9 +304,9 @@ Output ONLY the final working Dockerfile content after testing, no explanations 
                 # Only clean up on success
                 if temp_dockerfile.exists():
                     temp_dockerfile.unlink()
-            
+
             return self.image_name
-            
+
         finally:
             # Always restore original config
             if original_config is not None:
@@ -315,11 +316,11 @@ Output ONLY the final working Dockerfile content after testing, no explanations 
                 # If we created a new config but had no original, remove it
                 claude_config_path.unlink()
                 print("Removed temporary Claude Code configuration")
-            
+
             # Clean up backup file if it exists
             if backup_config_path.exists():
                 backup_config_path.unlink()
-    
+
     def cleanup(self):
         """Clean up container resources"""
         try:
@@ -327,11 +328,11 @@ Output ONLY the final working Dockerfile content after testing, no explanations 
             self.client.images.remove(self.image_name, force=True)
         except:
             pass
-        
+
         # Remove data directory
         if self.data_dir.exists():
             shutil.rmtree(self.data_dir)
-    
+
     def _image_exists(self) -> bool:
         """Check if image already exists"""
         try:
@@ -339,18 +340,18 @@ Output ONLY the final working Dockerfile content after testing, no explanations 
             return True
         except docker.errors.ImageNotFound:
             return False
-    
-    def _save_config(self, config: Dict[str, Any]):
+
+    def _save_config(self, config: dict[str, Any]):
         """Save container configuration"""
         self.config_file.write_text(json.dumps(config, indent=2))
-    
-    def _load_config(self) -> Optional[Dict[str, Any]]:
+
+    def _load_config(self) -> Optional[dict[str, Any]]:
         """Load container configuration"""
         if not self.config_file.exists():
             return None
         return json.loads(self.config_file.read_text())
-    
-    
+
+
     def check_git_ssh_origin(self) -> bool:
         """Check if Git remote origin uses SSH"""
         try:
@@ -366,4 +367,4 @@ Output ONLY the final working Dockerfile content after testing, no explanations 
             return True  # No git repo, allow to proceed
         except:
             return True  # If git check fails, allow to proceed
-    
+

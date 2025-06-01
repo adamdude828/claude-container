@@ -2,12 +2,12 @@
 
 import click
 
+from .commands.auth_check import auth_check
 from .commands.build import build
-from .commands.run import run
 from .commands.clean import clean
 from .commands.config import config
 from .commands.login import login
-from .commands.auth_check import auth_check
+from .commands.run import run
 from .commands.task import task
 
 
