@@ -28,7 +28,7 @@ def debug_settings():
         sys.exit(1)
     
     # Check if image exists
-    if not container_runner.docker_client.image_exists(image_name):
+    if not container_runner.docker_service.image_exists(image_name):
         click.echo(f"Container image '{image_name}' not found.", err=True)
         click.echo("Please run 'claude-container build' first.")
         sys.exit(1)

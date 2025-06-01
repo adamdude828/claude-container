@@ -25,7 +25,7 @@ def login():
         sys.exit(1)
     
     # Check if image exists
-    if not runner.docker_client.image_exists(image_name):
+    if not runner.docker_service.image_exists(image_name):
         click.echo(f"Container image '{image_name}' not found.", err=True)
         click.echo("Please run 'claude-container build' first.")
         sys.exit(1)

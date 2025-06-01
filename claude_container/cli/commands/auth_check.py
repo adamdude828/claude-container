@@ -32,7 +32,7 @@ def check_claude_auth(quiet=False):
         return False
     
     # Check if image exists
-    if not runner.docker_client.image_exists(image_name):
+    if not runner.docker_service.image_exists(image_name):
         if not quiet:
             click.echo(f"Container image '{image_name}' not found.", err=True)
             click.echo("Please run 'claude-container build' first.")
@@ -55,7 +55,7 @@ def check_claude_auth(quiet=False):
         config['labels'] = {"claude-container": "true", "claude-container-type": "auth-check"}
         
         # Run container
-        container = runner.docker_client.client.containers.run(**config)
+        container = runner.docker_service.run_container(**config)
         
         # Wait for container to complete and get exit code
         result = container.wait()
