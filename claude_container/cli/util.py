@@ -1,9 +1,7 @@
 """Shared utility functions for CLI commands."""
 
 import click
-import subprocess
-import tempfile
-import os
+from claude_container.cli.helpers import open_in_editor
 
 
 def get_description_from_editor():
@@ -25,50 +23,22 @@ def get_description_from_editor():
 
 """
     
-    # Get editor from environment or default to vim
-    editor = os.environ.get('EDITOR', 'vim')
+    content = open_in_editor(template)
     
-    # Create temporary file
-    fd, temp_path = tempfile.mkstemp(suffix='.md', text=True)
-    try:
-        # Write template to temp file
-        with os.fdopen(fd, 'w') as f:
-            f.write(template)
-        
-        # Open editor - use subprocess.run for better error handling
-        try:
-            result = subprocess.run([editor, temp_path], check=False)
-            
-            if result.returncode != 0:
-                return None
-        except FileNotFoundError:
-            click.echo(f"Error: Editor '{editor}' not found. Falling back to prompt.")
-            return None
-        except Exception as e:
-            click.echo(f"Error opening editor: {e}. Falling back to prompt.")
-            return None
-        
-        # Read contents
-        with open(temp_path, 'r') as f:
-            content = f.read()
-        
-        # Remove comment lines and clean up
-        lines = [line for line in content.split('\n') if not line.strip().startswith('#')]
-        description = '\n'.join(lines).strip()
-        
-        # Check if description is empty after removing comments
-        if not description:
-            click.echo("Description is empty. Falling back to prompt.")
-            return None
-            
-        return description
-    except Exception as e:
-        click.echo(f"Error: {e}. Falling back to prompt.")
+    if not content:
+        click.echo("Description is empty or editor failed. Falling back to prompt.")
         return None
-    finally:
-        # Clean up temp file if it still exists
-        if os.path.exists(temp_path):
-            os.unlink(temp_path)
+    
+    # Remove comment lines and clean up
+    lines = [line for line in content.split('\n') if not line.strip().startswith('#')]
+    description = '\n'.join(lines).strip()
+    
+    # Check if description is empty after removing comments
+    if not description:
+        click.echo("Description is empty. Falling back to prompt.")
+        return None
+        
+    return description
 
 
 def get_feedback_from_editor(initial_content=""):
@@ -86,32 +56,15 @@ def get_feedback_from_editor(initial_content=""):
 {initial_content}
 """
     
-    editor = os.environ.get('EDITOR', 'vim')
-    fd, temp_path = tempfile.mkstemp(suffix='.md', text=True)
+    content = open_in_editor(template)
     
-    try:
-        with os.fdopen(fd, 'w') as f:
-            f.write(template)
-        
-        try:
-            result = subprocess.run([editor, temp_path], check=False)
-            if result.returncode != 0:
-                return None
-        except Exception:
-            return None
-        
-        with open(temp_path, 'r') as f:
-            content = f.read()
-        
-        lines = [line for line in content.split('\n') if not line.strip().startswith('#')]
-        feedback = '\n'.join(lines).strip()
-        
-        if not feedback:
-            return None
-            
-        return feedback
-    except Exception:
+    if not content:
         return None
-    finally:
-        if os.path.exists(temp_path):
-            os.unlink(temp_path)
+    
+    lines = [line for line in content.split('\n') if not line.strip().startswith('#')]
+    feedback = '\n'.join(lines).strip()
+    
+    if not feedback:
+        return None
+        
+    return feedback

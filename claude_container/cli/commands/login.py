@@ -1,8 +1,8 @@
 import click
 import sys
-from pathlib import Path
+from claude_container.cli.helpers import get_project_context, ensure_container_built
 from claude_container.core.container_runner import ContainerRunner
-from claude_container.core.constants import CONTAINER_PREFIX, DATA_DIR_NAME
+from claude_container.core.constants import CONTAINER_PREFIX
 
 
 @click.command()
@@ -12,17 +12,17 @@ def login():
     Since authentication is shared with the host, logging in will
     authenticate Claude globally.
     """
-    project_root = Path.cwd()
-    data_dir = project_root / DATA_DIR_NAME
-    
-    if not data_dir.exists():
-        click.echo("No container found. Please run 'claude-container build' first.", err=True)
-        sys.exit(1)
+    project_root, data_dir = get_project_context()
+    ensure_container_built(data_dir)
     
     image_name = f"{CONTAINER_PREFIX}-{project_root.name}".lower()
     
     # Create container runner with unified config
-    runner = ContainerRunner(project_root, data_dir, image_name)
+    try:
+        runner = ContainerRunner(project_root, data_dir, image_name)
+    except RuntimeError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
     
     # Check if image exists
     if not runner.docker_client.image_exists(image_name):

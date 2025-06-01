@@ -3,14 +3,15 @@
 import click
 import subprocess
 import sys
-from pathlib import Path
 from datetime import datetime
 
-from ....core.container_runner import ContainerRunner
-from ....core.constants import CONTAINER_PREFIX, DATA_DIR_NAME, DEFAULT_WORKDIR, LIBERAL_SETTINGS_JSON
-from ....core.task_storage import TaskStorageManager
+from claude_container.cli.helpers import (
+    ensure_authenticated,
+    get_storage_and_runner,
+    cleanup_container
+)
+from ....core.constants import DEFAULT_WORKDIR, LIBERAL_SETTINGS_JSON
 from ....models.task import TaskStatus
-from ...commands.auth_check import check_claude_auth
 from ...util import get_description_from_editor
 
 
@@ -21,35 +22,11 @@ from ...util import get_description_from_editor
 def create(branch, description_file):
     """Create a new task and run it to completion"""
     # Verify Claude authentication
-    if not check_claude_auth():
-        sys.exit(1)
+    ensure_authenticated()
     
-    # Initialize project configuration
-    project_root = Path.cwd()
-    data_dir = project_root / DATA_DIR_NAME
-    
-    # Validate container environment
-    if not data_dir.exists():
-        click.echo("Error: No container found. Please run 'claude-container build' first.", err=True)
-        sys.exit(1)
-    
-    # Initialize storage manager
-    storage_manager = TaskStorageManager(data_dir)
-    
-    image_name = f"{CONTAINER_PREFIX}-{project_root.name}".lower()
-    
-    # Initialize container runner
-    try:
-        container_runner = ContainerRunner(project_root, data_dir, image_name)
-    except RuntimeError as e:
-        click.echo(f"Error initializing container: {e}", err=True)
-        sys.exit(1)
-    
-    # Verify container image exists
-    if not container_runner.docker_client.image_exists(image_name):
-        click.echo(f"Error: Container image '{image_name}' not found.", err=True)
-        click.echo("Please run 'claude-container build' first.")
-        sys.exit(1)
+    # Initialize storage and runner
+    storage_manager, container_runner = get_storage_and_runner()
+    project_root = container_runner.project_root
     
     # Collect task parameters
     click.echo("\n" + "=" * 60)
@@ -332,11 +309,4 @@ def create(branch, description_file):
         
     finally:
         # Step 5: Cleanup
-        if container:
-            try:
-                click.echo("\n🧹 Cleaning up resources...")
-                container.stop()
-                container.remove()
-                click.echo("✅ Container removed successfully")
-            except Exception as e:
-                click.echo(f"⚠️  Warning: Failed to remove container: {e}", err=True)
+        cleanup_container(container)
