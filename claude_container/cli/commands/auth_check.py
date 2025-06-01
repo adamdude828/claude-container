@@ -1,8 +1,8 @@
 import click
 import sys
-from pathlib import Path
+from claude_container.cli.helpers import get_project_context
 from claude_container.core.container_runner import ContainerRunner
-from claude_container.core.constants import CONTAINER_PREFIX, DATA_DIR_NAME
+from claude_container.core.constants import CONTAINER_PREFIX
 
 
 def check_claude_auth(quiet=False):
@@ -14,8 +14,7 @@ def check_claude_auth(quiet=False):
     Returns:
         bool: True if authentication is valid, False otherwise
     """
-    project_root = Path.cwd()
-    data_dir = project_root / DATA_DIR_NAME
+    project_root, data_dir = get_project_context()
     
     if not data_dir.exists():
         if not quiet:

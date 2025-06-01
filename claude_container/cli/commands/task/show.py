@@ -1,10 +1,7 @@
 """Show task command."""
 
 import click
-import sys
-from pathlib import Path
-
-from ....core.constants import DATA_DIR_NAME
+from claude_container.cli.helpers import get_project_context, ensure_container_built, resolve_task_id
 from ....core.task_storage import TaskStorageManager
 
 
@@ -13,29 +10,13 @@ from ....core.task_storage import TaskStorageManager
 @click.option('--feedback-history', is_flag=True, help='Show feedback history')
 def show(task_id, feedback_history):
     """Show detailed information about a task"""
-    project_root = Path.cwd()
-    data_dir = project_root / DATA_DIR_NAME
-    
-    if not data_dir.exists():
-        click.echo("Error: No container configuration found.", err=True)
-        sys.exit(1)
+    project_root, data_dir = get_project_context()
+    ensure_container_built(data_dir)
     
     storage_manager = TaskStorageManager(data_dir)
     
     # Get task (support short IDs)
-    task_metadata = storage_manager.get_task(task_id)
-    if not task_metadata:
-        # Try to find by short ID
-        all_tasks = storage_manager.list_tasks()
-        matching_tasks = [t for t in all_tasks if t.id.startswith(task_id)]
-        if len(matching_tasks) == 1:
-            task_metadata = matching_tasks[0]
-        elif len(matching_tasks) > 1:
-            click.echo(f"Error: Multiple tasks found starting with '{task_id}'", err=True)
-            sys.exit(1)
-        else:
-            click.echo(f"Error: No task found with ID: {task_id}", err=True)
-            sys.exit(1)
+    task_metadata = resolve_task_id(storage_manager, task_id)
     
     # Display task details
     click.echo("\n" + "=" * 80)
