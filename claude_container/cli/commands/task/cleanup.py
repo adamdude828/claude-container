@@ -6,7 +6,8 @@ from pathlib import Path
 from tabulate import tabulate
 
 from ....core.constants import CONTAINER_PREFIX
-from ....core.docker_client import DockerClient
+from ....services.docker_service import DockerService
+from ....services.exceptions import DockerServiceError
 
 
 @click.command()
@@ -16,13 +17,20 @@ def cleanup(force):
     project_root = Path.cwd()
     
     try:
-        docker_client = DockerClient()
+        docker_service = DockerService()
         
         # List containers for this project
-        containers = docker_client.list_task_containers(
-            name_prefix=f"{CONTAINER_PREFIX}-task",
-            project_name=project_root.name
+        containers = docker_service.list_containers(
+            all=True,
+            labels={
+                "claude-container": "true",
+                "claude-container-project": project_root.name.lower()
+            }
         )
+        
+        # Filter by name prefix
+        name_prefix = f"{CONTAINER_PREFIX}-task"
+        containers = [c for c in containers if c.name.startswith(name_prefix)]
         
         if not containers:
             click.echo(f"No task containers found for project '{project_root.name}'")
@@ -77,7 +85,7 @@ def cleanup(force):
                 
                 # Remove container
                 click.echo(f"  Removing {container.name}...")
-                container.remove()
+                docker_service.remove_container(container)
                 removed_count += 1
             except Exception as e:
                 click.echo(f"  ❌ Failed to remove {container.name}: {e}", err=True)
@@ -88,6 +96,6 @@ def cleanup(force):
         if failed_count > 0:
             click.echo(f"⚠️  Failed to remove {failed_count} container(s)", err=True)
             
-    except RuntimeError as e:
+    except DockerServiceError as e:
         click.echo(f"Error: Could not access Docker: {e}", err=True)
         sys.exit(1)

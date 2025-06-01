@@ -5,34 +5,30 @@ import os
 from typing import Optional, Tuple
 from pathlib import Path
 
+from ..services.git_service import GitService
+from ..services.exceptions import GitServiceError
+
 
 class GitHubIntegration:
     """Handle GitHub operations for Claude tasks."""
     
     def __init__(self, project_dir: str):
         self.project_dir = Path(project_dir).resolve()
+        self.git_service = GitService(self.project_dir)
         
     def create_branch(self, branch_name: str) -> bool:
         """Create and push a new branch."""
         try:
-            # Save current directory
-            original_dir = os.getcwd()
-            os.chdir(self.project_dir)
-            
             # Create and checkout branch
-            subprocess.run(['git', 'checkout', '-b', branch_name], 
-                         check=True, capture_output=True, text=True)
+            self.git_service.checkout_branch(branch_name, create=True)
             
             # Push branch to origin
-            subprocess.run(['git', 'push', '-u', 'origin', branch_name],
-                         check=True, capture_output=True, text=True)
+            self.git_service.push_branch(branch_name, set_upstream=True)
             
             return True
-        except subprocess.CalledProcessError as e:
-            print(f"Error creating branch: {e.stderr}")
+        except GitServiceError as e:
+            print(f"Error creating branch: {e}")
             return False
-        finally:
-            os.chdir(original_dir)
     
     def create_pull_request(self, branch_name: str, title: str, body: str) -> Optional[str]:
         """Create a pull request and return its URL."""
@@ -104,32 +100,17 @@ class GitHubIntegration:
     def check_git_status(self) -> Tuple[bool, str]:
         """Check if git working directory is clean."""
         try:
-            original_dir = os.getcwd()
-            os.chdir(self.project_dir)
+            changes = self.git_service.get_uncommitted_changes()
+            is_clean = len(changes) == 0
+            status_msg = "" if is_clean else "\n".join(changes)
+            return is_clean, status_msg
             
-            result = subprocess.run(['git', 'status', '--porcelain'],
-                                  capture_output=True, text=True, check=True)
-            
-            is_clean = len(result.stdout.strip()) == 0
-            return is_clean, result.stdout
-            
-        except subprocess.CalledProcessError as e:
+        except GitServiceError as e:
             return False, str(e)
-        finally:
-            os.chdir(original_dir)
     
     def get_current_branch(self) -> Optional[str]:
         """Get current git branch name."""
         try:
-            original_dir = os.getcwd()
-            os.chdir(self.project_dir)
-            
-            result = subprocess.run(['git', 'branch', '--show-current'],
-                                  capture_output=True, text=True, check=True)
-            
-            return result.stdout.strip()
-            
-        except subprocess.CalledProcessError:
+            return self.git_service.get_current_branch()
+        except GitServiceError:
             return None
-        finally:
-            os.chdir(original_dir)

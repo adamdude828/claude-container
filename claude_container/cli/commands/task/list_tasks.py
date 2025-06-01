@@ -3,7 +3,8 @@
 import click
 from claude_container.cli.helpers import get_project_context, format_task_table
 from ....core.constants import CONTAINER_PREFIX
-from ....core.docker_client import DockerClient
+from ....services.docker_service import DockerService
+from ....services.exceptions import DockerServiceError
 from ....core.task_storage import TaskStorageManager
 from ....models.task import TaskStatus
 
@@ -36,13 +37,20 @@ def list(status):
     
     # Also show running containers
     try:
-        docker_client = DockerClient()
+        docker_service = DockerService()
         
         # List containers for this project
-        containers = docker_client.list_task_containers(
-            name_prefix=f"{CONTAINER_PREFIX}-task",
-            project_name=project_root.name
+        containers = docker_service.list_containers(
+            all=True,
+            labels={
+                "claude-container": "true",
+                "claude-container-project": project_root.name.lower()
+            }
         )
+        
+        # Filter by name prefix
+        name_prefix = f"{CONTAINER_PREFIX}-task"
+        containers = [c for c in containers if c.name.startswith(name_prefix)]
         
         if containers:
             click.echo("\n🐳 Running task containers:")
@@ -74,5 +82,5 @@ def list(status):
             )
             click.echo(container_table)
                 
-    except RuntimeError as e:
+    except DockerServiceError as e:
         click.echo(f"\n⚠️  Warning: Could not list Docker containers: {e}", err=True)
