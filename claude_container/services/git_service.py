@@ -3,9 +3,9 @@
 import logging
 import subprocess
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
-from .exceptions import GitServiceError, BranchNotFoundError
+from .exceptions import BranchNotFoundError, GitServiceError
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ class GitService:
             return False
 
     def _run_git_command(
-        self, args: List[str], check: bool = True, capture_output: bool = True
+        self, args: list[str], check: bool = True, capture_output: bool = True
     ) -> subprocess.CompletedProcess:
         """Run a git command with proper error handling.
 
@@ -253,7 +253,7 @@ class GitService:
         result = self._run_git_command(["rev-parse", ref])
         return result.stdout.strip()
 
-    def get_uncommitted_changes(self) -> List[str]:
+    def get_uncommitted_changes(self) -> list[str]:
         """Get list of files with uncommitted changes.
 
         Returns:

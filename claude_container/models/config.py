@@ -1,16 +1,16 @@
 """Configuration models for Claude Container."""
 
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Optional
 
 
 @dataclass
 class ToolPermissions:
     """Tool permissions configuration."""
-    
-    allow: List[str]
-    deny: Optional[List[str]] = None
-    
+
+    allow: list[str]
+    deny: Optional[list[str]] = None
+
     def to_dict(self) -> dict:
         """Convert to dictionary."""
         result = {"allow": self.allow}
@@ -22,15 +22,15 @@ class ToolPermissions:
 @dataclass
 class ClaudeConfig:
     """Claude configuration model."""
-    
+
     tool_permissions: ToolPermissions
-    
+
     def to_dict(self) -> dict:
         """Convert to dictionary."""
         return {
             "toolPermissions": self.tool_permissions.to_dict()
         }
-    
+
     @classmethod
     def from_dict(cls, data: dict) -> 'ClaudeConfig':
         """Create from dictionary."""
@@ -45,10 +45,10 @@ class ClaudeConfig:
 @dataclass
 class ContainerConfig:
     """Container configuration model."""
-    
+
     type: str
     generated_at: str
-    
+
     def to_dict(self) -> dict:
         """Convert to dictionary."""
         return {

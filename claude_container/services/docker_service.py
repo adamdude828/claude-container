@@ -4,7 +4,7 @@ import io
 import logging
 import tarfile
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Any, Optional
 
 import docker
 import docker.errors
@@ -12,9 +12,9 @@ from docker.models.containers import Container
 from docker.models.images import Image
 
 from .exceptions import (
+    ContainerNotFoundError,
     DockerServiceError,
     ImageNotFoundError,
-    ContainerNotFoundError,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,8 +43,8 @@ class DockerService:
         tag: str,
         rm: bool = True,
         nocache: bool = False,
-        buildargs: Optional[Dict[str, str]] = None,
-    ) -> Tuple[Image, List[Dict[str, Any]]]:
+        buildargs: Optional[dict[str, str]] = None,
+    ) -> tuple[Image, list[dict[str, Any]]]:
         """Build a Docker image.
 
         Args:
@@ -81,10 +81,10 @@ class DockerService:
         image: str,
         name: Optional[str] = None,
         command: Optional[str] = None,
-        volumes: Optional[Dict[str, Dict[str, str]]] = None,
-        environment: Optional[Dict[str, str]] = None,
+        volumes: Optional[dict[str, dict[str, str]]] = None,
+        environment: Optional[dict[str, str]] = None,
         working_dir: Optional[str] = None,
-        labels: Optional[Dict[str, str]] = None,
+        labels: Optional[dict[str, str]] = None,
         **kwargs,
     ) -> Container:
         """Create a Docker container.
@@ -251,9 +251,9 @@ class DockerService:
     def list_containers(
         self,
         all: bool = True,
-        filters: Optional[Dict[str, Any]] = None,
-        labels: Optional[Dict[str, str]] = None,
-    ) -> List[Container]:
+        filters: Optional[dict[str, Any]] = None,
+        labels: Optional[dict[str, str]] = None,
+    ) -> list[Container]:
         """List containers with optional filters.
 
         Args:
