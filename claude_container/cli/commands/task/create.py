@@ -26,7 +26,7 @@ def create(branch, description_file):
     
     # Initialize storage and runner
     storage_manager, container_runner = get_storage_and_runner()
-    project_root = container_runner.project_dir
+    project_root = container_runner.project_root
     
     # Collect task parameters
     click.echo("\n" + "=" * 60)

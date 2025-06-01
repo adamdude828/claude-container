@@ -274,7 +274,7 @@ def open_in_editor(template: str = "", suffix: str = ".md") -> str:
         Returns empty string if user cancels or editor fails.
     """
     import os
-    editor = os.environ.get('EDITOR', 'nano')
+    editor = os.environ.get('EDITOR', 'vim')
     
     try:
         with tempfile.NamedTemporaryFile(mode='w+', suffix=suffix, delete=False) as f:
