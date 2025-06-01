@@ -2,6 +2,14 @@
 
 This module provides reusable helper functions for CLI commands to reduce
 code duplication and standardize behavior across all commands.
+
+The helpers provide:
+- Authentication and authorization checks
+- Project context and configuration management
+- Task ID resolution with short ID support
+- Consistent table formatting for output
+- Container lifecycle management
+- Editor integration for user input
 """
 
 from pathlib import Path
