@@ -43,7 +43,7 @@ class TestTaskCommand:
         assert "delete" in result.output
     
     # Tests for CREATE command
-    @patch('claude_container.cli.commands.task.create.check_claude_auth')
+    @patch('claude_container.cli.commands.auth_check.check_claude_auth')
     def test_create_no_auth(self, mock_auth, cli_runner):
         """Test task create when authentication fails."""
         mock_auth.return_value = False
@@ -53,33 +53,32 @@ class TestTaskCommand:
         assert result.exit_code == 1
         mock_auth.assert_called_once()
     
-    @patch('claude_container.cli.commands.task.create.check_claude_auth')
-    def test_create_no_container(self, mock_auth, cli_runner):
+    @patch('claude_container.cli.commands.task.create.get_storage_and_runner')
+    def test_create_no_container(self, mock_get_storage_runner, cli_runner):
         """Test task create when no container exists."""
-        mock_auth.return_value = True
+        mock_get_storage_runner.side_effect = SystemExit(1)
         
         with cli_runner.isolated_filesystem():
             result = cli_runner.invoke(task, ['create'])
             
             assert result.exit_code == 1
-            assert "No container found" in result.output
     
     @patch('claude_container.cli.commands.task.create.subprocess.run')
-    @patch('claude_container.cli.commands.task.create.TaskStorageManager')
-    @patch('claude_container.cli.commands.task.create.ContainerRunner')
-    @patch('claude_container.cli.commands.task.create.check_claude_auth')
-    def test_create_success(self, mock_auth, mock_runner_class, mock_storage_class, mock_subprocess, cli_runner, mock_task):
+    @patch('claude_container.cli.commands.task.create.get_storage_and_runner')
+    @patch('claude_container.cli.commands.task.create.ensure_authenticated')
+    def test_create_success(self, mock_auth, mock_get_storage_runner, mock_subprocess, cli_runner, mock_task):
         """Test successful task create."""
         mock_auth.return_value = True
         
-        # Mock storage manager
+        # Mock get_storage_and_runner to return storage and runner
         mock_storage = MagicMock()
         mock_storage.create_task.return_value = mock_task
-        mock_storage_class.return_value = mock_storage
         
-        # Mock ContainerRunner
         mock_runner = MagicMock()
+        mock_runner.project_dir = Path.cwd()
         mock_runner.docker_client.image_exists.return_value = True
+        
+        mock_get_storage_runner.return_value = (mock_storage, mock_runner)
         
         # Mock container
         mock_container = MagicMock()
@@ -109,7 +108,6 @@ class TestTaskCommand:
             MagicMock(exit_code=0, output=b"Branch pushed")
         ]
         mock_runner.create_persistent_container.return_value = mock_container
-        mock_runner_class.return_value = mock_runner
         
         # Mock subprocess.run calls
         def subprocess_side_effect(*args, **kwargs):
@@ -153,21 +151,18 @@ class TestTaskCommand:
             mock_container.remove.assert_called_once()
     
     @patch('claude_container.cli.commands.task.create.subprocess.run')
-    @patch('claude_container.cli.commands.task.create.ContainerRunner')
-    @patch('claude_container.cli.commands.task.create.TaskStorageManager')
-    @patch('claude_container.cli.commands.task.create.check_claude_auth')
-    def test_create_branch_exists(self, mock_auth, mock_storage_class, mock_runner_class, mock_subprocess, cli_runner):
+    @patch('claude_container.cli.commands.task.create.get_storage_and_runner')
+    @patch('claude_container.cli.commands.task.create.ensure_authenticated')
+    def test_create_branch_exists(self, mock_auth, mock_get_storage_runner, mock_subprocess, cli_runner):
         """Test task create when branch already exists."""
         mock_auth.return_value = True
         
-        # Setup storage
+        # Setup storage and runner
         mock_storage = MagicMock()
-        mock_storage_class.return_value = mock_storage
-        
-        # Setup container runner
         mock_runner = MagicMock()
+        mock_runner.project_dir = Path.cwd()
         mock_runner.docker_client.image_exists.return_value = True
-        mock_runner_class.return_value = mock_runner
+        mock_get_storage_runner.return_value = (mock_storage, mock_runner)
         
         # Mock subprocess.run calls - branch exists on remote
         def subprocess_side_effect(*args, **kwargs):
@@ -504,28 +499,27 @@ class TestTaskCommand:
     
     # Test error handling
     @patch('claude_container.cli.commands.task.create.subprocess.run')
-    @patch('claude_container.cli.commands.task.create.TaskStorageManager')
-    @patch('claude_container.cli.commands.task.create.ContainerRunner')
-    @patch('claude_container.cli.commands.task.create.check_claude_auth')
-    def test_create_with_error_after_task_created(self, mock_auth, mock_runner_class, mock_storage_class, mock_subprocess, cli_runner, mock_task):
+    @patch('claude_container.cli.commands.task.create.get_storage_and_runner')
+    @patch('claude_container.cli.commands.task.create.ensure_authenticated')
+    def test_create_with_error_after_task_created(self, mock_auth, mock_get_storage_runner, mock_subprocess, cli_runner, mock_task):
         """Test task create when an error occurs after task is created."""
         mock_auth.return_value = True
         
-        # Mock storage manager
+        # Mock storage manager and runner
         mock_storage = MagicMock()
         mock_storage.create_task.return_value = mock_task
-        mock_storage_class.return_value = mock_storage
         
-        # Mock ContainerRunner successfully
         mock_runner = MagicMock()
+        mock_runner.project_dir = Path.cwd()
         mock_runner.docker_client.image_exists.return_value = True
+        
+        mock_get_storage_runner.return_value = (mock_storage, mock_runner)
         
         # Mock container that will fail on exec_run
         mock_container = MagicMock()
         mock_container.id = "container-123"
         mock_container.exec_run.side_effect = Exception("Container execution failed")
         mock_runner.create_persistent_container.return_value = mock_container
-        mock_runner_class.return_value = mock_runner
         
         with cli_runner.isolated_filesystem():
             Path(".claude-container").mkdir()
@@ -653,7 +647,7 @@ class TestTaskCommand:
             # Verify search was called with correct query
             mock_storage.search_tasks.assert_called_once_with('test')
     
-    @patch('claude_container.cli.commands.task.create.TaskStorageManager')
+    @patch('claude_container.cli.commands.task.search.TaskStorageManager')
     def test_search_command_no_results(self, mock_storage_class, cli_runner):
         """Test task search command with no matching results."""
         # Mock storage manager

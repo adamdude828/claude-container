@@ -107,15 +107,14 @@ class TestAuthCheckCommand:
         assert "Check if Claude authentication is still valid" in result.output
     
     @patch('claude_container.cli.commands.auth_check.ContainerRunner')
-    @patch('claude_container.cli.commands.auth_check.Path')
-    def test_check_claude_auth_function_success(self, mock_path, mock_runner_class):
+    @patch('claude_container.cli.commands.auth_check.get_project_context')
+    def test_check_claude_auth_function_success(self, mock_get_context, mock_runner_class):
         """Test check_claude_auth function returns True when authenticated."""
-        # Mock Path to have data dir exist
-        mock_cwd = MagicMock()
-        mock_path.cwd.return_value = mock_cwd
+        # Mock get_project_context to return existing data dir
+        mock_project_root = MagicMock()
         mock_data_dir = MagicMock()
         mock_data_dir.exists.return_value = True
-        mock_cwd.__truediv__.return_value = mock_data_dir
+        mock_get_context.return_value = (mock_project_root, mock_data_dir)
         
         # Mock ContainerRunner
         mock_runner = MagicMock()
@@ -132,15 +131,14 @@ class TestAuthCheckCommand:
         mock_container.remove.assert_called_once()
     
     @patch('claude_container.cli.commands.auth_check.ContainerRunner')
-    @patch('claude_container.cli.commands.auth_check.Path')
-    def test_check_claude_auth_function_failure(self, mock_path, mock_runner_class):
+    @patch('claude_container.cli.commands.auth_check.get_project_context')
+    def test_check_claude_auth_function_failure(self, mock_get_context, mock_runner_class):
         """Test check_claude_auth function returns False when not authenticated."""
-        # Mock Path to have data dir exist
-        mock_cwd = MagicMock()
-        mock_path.cwd.return_value = mock_cwd
+        # Mock get_project_context to return existing data dir
+        mock_project_root = MagicMock()
         mock_data_dir = MagicMock()
         mock_data_dir.exists.return_value = True
-        mock_cwd.__truediv__.return_value = mock_data_dir
+        mock_get_context.return_value = (mock_project_root, mock_data_dir)
         
         # Mock ContainerRunner
         mock_runner = MagicMock()
