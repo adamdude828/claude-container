@@ -38,3 +38,4 @@ class TaskMetadata:
     feedback_history: List[FeedbackEntry] = field(default_factory=list)  # All feedback provided
     last_continued_at: Optional[datetime] = None  # When task was last continued
     continuation_count: int = 0  # Number of times continued
+    mcp_servers: Optional[List[str]] = None  # Selected MCP servers for this task

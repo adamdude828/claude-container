@@ -47,6 +47,8 @@ CONTAINER_PREFIX = "claude-container"
 DATA_DIR_NAME = ".claude-container"
 DOCKERFILE_NAME = "Dockerfile.claude"
 CONFIG_FILE_NAME = "container_config.json"
+MCP_CONFIG_FILE = "mcp.json"
+MCP_CONFIG_PATH = ".mcp.json"
 
 # Liberal settings for container environment
 LIBERAL_SETTINGS_JSON = """{

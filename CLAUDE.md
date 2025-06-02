@@ -8,14 +8,15 @@ Claude Container is a Docker container system for Claude Code that enables:
 4. Managing both synchronous and asynchronous workflows with a daemon
 
 ## Project Status
-- **Current State**: Core container infrastructure is complete with unified configuration
+- **Current State**: Core container infrastructure is complete with unified configuration and MCP support
 - **Recent Updates**:
   1. Implemented unified container configuration system
   2. Fixed interactive shell support for login and run commands
   3. Improved error handling with proper stderr output
+  4. Added dynamic MCP server registration and selection for tasks
 - **Next Steps**: 
-  1. Implement synchronous task functionality
-  2. Add asynchronous task support with daemon
+  1. Add asynchronous task support with daemon
+  2. Implement task continuation with PR automation
 
 ## Key Commands
 - `claude-container build` - Build a Docker container with Claude Code
@@ -23,7 +24,11 @@ Claude Container is a Docker container system for Claude Code that enables:
 - `claude-container run` - Run commands in the container
 - `claude-container login` - Open interactive shell for Claude authentication
 - `claude-container auth-check` - Verify Claude authentication status
-- `claude-container task` - Submit background tasks (to be implemented)
+- `claude-container task` - Submit tasks with PR creation
+- `claude-container mcp` - Manage MCP (Model Context Protocol) servers
+  - `mcp list` - List registered MCP servers
+  - `mcp add` - Add a new MCP server
+  - `mcp remove` - Remove an MCP server
 
 ## Testing Commands
 ```bash
@@ -69,6 +74,8 @@ The `ContainerRunner` class provides unified container configuration:
 - ✅ Error output properly captured and displayed
 - ✅ All commands use unified container configuration
 - ✅ Claude authentication files properly mounted with read-write access
+- ✅ Dynamic MCP server registration and selection
+- ✅ MCP configuration written to containers before Claude execution
 
 ## Development Workflow
 1. Install with poetry: `poetry install`

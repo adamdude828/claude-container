@@ -201,6 +201,48 @@ claude-container clean images
 claude-container clean all
 ```
 
+### Managing MCP (Model Context Protocol) Servers
+
+Claude Container supports dynamic MCP server configuration for tasks. MCP servers provide additional context and capabilities to Claude.
+
+```bash
+# List registered MCP servers
+claude-container mcp list
+
+# Add a new MCP server
+claude-container mcp add context7 '{"type": "stdio", "command": "npx", "args": ["-y", "@upstash/context7-mcp"]}'
+
+# Add an HTTP MCP server
+claude-container mcp add telemetry '{"type": "http", "url": "https://mcp.example.com"}'
+
+# Load server config from file
+claude-container mcp add myserver @server-config.json
+
+# Remove an MCP server
+claude-container mcp remove context7
+```
+
+### Using MCP Servers with Tasks
+
+When creating or continuing tasks, you can specify which MCP servers to use:
+
+```bash
+# Create task with specific MCP servers
+claude-container task create --mcp context7,telemetry "Build a new feature"
+
+# Continue task with different servers (overrides previous selection)
+claude-container task continue task-id --mcp telemetry
+
+# Create task and select servers interactively (if MCP servers are registered)
+claude-container task create "Implement authentication"
+# Will prompt: Select MCP servers to use for this task
+```
+
+If no `--mcp` flag is provided:
+- In interactive mode: prompts you to select from available servers
+- In non-interactive mode (CI/scripts): uses all available servers
+- When continuing a task: uses the servers from the previous run
+
 ## Configuration
 
 Configuration is stored in `.claude-container/container_config.json`:

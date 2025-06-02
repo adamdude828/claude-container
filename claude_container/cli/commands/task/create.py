@@ -1,17 +1,22 @@
 """Create task command."""
 
+import json
 import click
 import subprocess
 import sys
 from datetime import datetime
+
+import questionary
+from rich.console import Console
 
 from claude_container.cli.helpers import (
     ensure_authenticated,
     get_storage_and_runner,
     cleanup_container
 )
-from ....core.constants import DEFAULT_WORKDIR, LIBERAL_SETTINGS_JSON
+from ....core.constants import DEFAULT_WORKDIR, LIBERAL_SETTINGS_JSON, MCP_CONFIG_PATH
 from ....models.task import TaskStatus
+from ....utils import MCPManager
 from ...util import get_description_from_editor
 
 
@@ -19,7 +24,8 @@ from ...util import get_description_from_editor
 @click.option('--branch', '-b', help='Git branch name for the task')
 @click.option('--file', '-f', 'description_file', type=click.Path(exists=True), 
               help='File containing task description')
-def create(branch, description_file):
+@click.option('--mcp', help='Comma-separated list of MCP servers to use')
+def create(branch, description_file, mcp):
     """Create a new task and run it to completion"""
     # Verify Claude authentication
     ensure_authenticated()
@@ -58,6 +64,58 @@ def create(branch, description_file):
     if not task_description or task_description.isspace():
         click.echo("\nError: Task description cannot be empty.", err=True)
         sys.exit(1)
+    
+    # Handle MCP server selection
+    console = Console()
+    mcp_manager = MCPManager(project_root)
+    selected_servers = []
+    
+    try:
+        all_servers = mcp_manager.list_servers()
+        
+        if mcp:
+            # Use provided server list
+            requested = [s.strip() for s in mcp.split(',')]
+            missing = mcp_manager.validate_server_names(requested)
+            
+            if missing:
+                console.print(f"[red]Error: Unknown MCP servers: {', '.join(missing)}[/red]")
+                console.print(f"Available servers: {', '.join(all_servers)}")
+                sys.exit(1)
+            
+            selected_servers = requested
+            console.print(f"[green]Using MCP servers: {', '.join(selected_servers)}[/green]")
+        
+        elif all_servers and sys.stdin.isatty():
+            # Interactive mode - show prompt
+            console.print("\n[cyan]Select MCP servers to use for this task:[/cyan]")
+            
+            # Add "All servers" option at the top
+            choices = ["All servers"] + all_servers
+            selected = questionary.checkbox(
+                "Available servers:",
+                choices=choices,
+                default=["All servers"]
+            ).ask()
+            
+            if selected is None:
+                console.print("[yellow]No servers selected, continuing without MCP[/yellow]")
+            elif "All servers" in selected:
+                selected_servers = all_servers
+                console.print(f"[green]Using all MCP servers: {', '.join(selected_servers)}[/green]")
+            else:
+                selected_servers = selected
+                console.print(f"[green]Using MCP servers: {', '.join(selected_servers)}[/green]")
+        
+        else:
+            # Non-interactive mode or no servers - use all available
+            selected_servers = all_servers
+            if selected_servers:
+                console.print(f"[green]Using all available MCP servers: {', '.join(selected_servers)}[/green]")
+    
+    except Exception as e:
+        console.print(f"[yellow]Warning: Failed to load MCP servers: {e}[/yellow]")
+        # Continue without MCP servers
     
     # Check if branch already exists locally or remotely before creating task
     try:
@@ -101,6 +159,10 @@ def create(branch, description_file):
     
     # Create task record
     task_metadata = storage_manager.create_task(task_description, branch)
+    # Store selected MCP servers
+    if selected_servers:
+        task_metadata.mcp_servers = selected_servers
+        storage_manager.update_task(task_metadata.id, mcp_servers=selected_servers)
     click.echo(f"\n✅ Created task {task_metadata.id[:8]} on branch '{branch}'")
     
     container = None
@@ -140,6 +202,22 @@ def create(branch, description_file):
                 f"echo '.claude/settings.local.json' >> {DEFAULT_WORKDIR}/.gitignore",
                 workdir=DEFAULT_WORKDIR
             )
+        
+        # Write MCP configuration if servers are selected
+        if selected_servers:
+            click.echo("🔧 Configuring MCP servers...")
+            try:
+                # Get filtered registry with only selected servers
+                filtered_registry = mcp_manager.filter_registry(selected_servers)
+                mcp_config = filtered_registry.to_mcp_json()
+                
+                # Write MCP configuration to container
+                mcp_path = f"{DEFAULT_WORKDIR}/{MCP_CONFIG_PATH}"
+                container_runner.write_file(container, mcp_path, json.dumps(mcp_config, indent=2))
+                
+                click.echo(f"✅ Configured {len(selected_servers)} MCP server(s)")
+            except Exception as e:
+                click.echo(f"⚠️  Warning: Failed to configure MCP servers: {e}", err=True)
         
         # Step 1: Git branch setup
         click.echo(f"\n🌿 Setting up branch '{branch}'...")

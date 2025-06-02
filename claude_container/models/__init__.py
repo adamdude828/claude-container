@@ -3,6 +3,7 @@
 from .config import ClaudeConfig
 from .container import ContainerConfig, RuntimeVersion
 from .task import TaskMetadata, TaskStatus, FeedbackEntry
+from .mcp import MCPServerConfig, MCPRegistry
 
 __all__ = [
     'ClaudeConfig',
@@ -10,5 +11,7 @@ __all__ = [
     'RuntimeVersion',
     'TaskMetadata',
     'TaskStatus',
-    'FeedbackEntry'
+    'FeedbackEntry',
+    'MCPServerConfig',
+    'MCPRegistry'
 ]

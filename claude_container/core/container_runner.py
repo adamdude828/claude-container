@@ -278,3 +278,34 @@ class ContainerRunner:
             return container
         except Exception as e:
             raise RuntimeError(f"Failed to create container: {e}")
+    
+    def write_file(self, container, file_path: str, content: str) -> None:
+        """Write a file inside a running container.
+        
+        Args:
+            container: Docker container object
+            file_path: Path inside container to write to
+            content: Content to write to the file
+        """
+        # Escape content for shell
+        escaped_content = content.replace("'", "'\"'\"'")
+        
+        # Use echo with heredoc for reliable content writing
+        command = f"sh -c 'cat > {file_path} << '\''EOF'\''\n{escaped_content}\nEOF'"
+        
+        try:
+            result = self.docker_service.exec_in_container(
+                container,
+                command,
+                stream=False,
+                tty=False
+            )
+            
+            # Check if command succeeded
+            exit_code = result.get('ExitCode', 1)
+            if exit_code != 0:
+                stderr = result.get('stderr', b'').decode('utf-8')
+                raise RuntimeError(f"Failed to write file: {stderr}")
+                
+        except Exception as e:
+            raise RuntimeError(f"Failed to write file {file_path}: {e}")

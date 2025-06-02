@@ -9,6 +9,7 @@ from .commands.config import config
 from .commands.login import login
 from .commands.auth_check import auth_check
 from .commands.task import task
+from .commands.mcp import mcp
 
 
 @click.group()
@@ -25,6 +26,7 @@ cli.add_command(config)
 cli.add_command(login)
 cli.add_command(auth_check)
 cli.add_command(task)
+cli.add_command(mcp)
 
 
 if __name__ == '__main__':
