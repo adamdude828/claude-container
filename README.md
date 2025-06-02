@@ -338,3 +338,7 @@ Contributions are welcome! Here's how you can contribute:
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Clerk Authentication Research
+
+Clerk is a modern authentication platform that provides developers with pre-built UI components and flexible APIs for user management. It offers a comprehensive suite of authentication methods including email/password, magic links, social logins, and enterprise SSO. Clerk's architecture uses a two-token model for security, with dedicated Frontend and Backend APIs, and provides SOC 2 Type II compliance. Its main advantages are the exceptional developer experience with drop-in React components, fast implementation time, and production-ready features from day one. Clerk is particularly well-suited for startups and B2B SaaS applications that need quick authentication implementation with organization management capabilities, though it can become expensive at scale compared to alternatives like Auth0.
