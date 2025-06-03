@@ -344,6 +344,12 @@ class ContainerRunner:
         Returns:
             Result from container.exec_run
         """
+        # First, ensure the workspace is owned by the target user
+        if user == "node":
+            chown_result = container.exec_run(['chown', '-R', 'node:node', '/workspace'])
+            if chown_result.exit_code != 0:
+                print(f"Warning: Failed to change ownership of /workspace: {chown_result.output.decode('utf-8')}")
+        
         # If command is a string, keep it as a string for proper shell execution
         if isinstance(command, str):
             # Use su to switch to the specified user with the command as a single string
