@@ -13,7 +13,10 @@ RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /root/.npm-global && \
     mkdir -p /workspace && \
     mkdir -p /root && \
-    chmod 777 /root
+    chmod 777 /root && \
+    mkdir -p /home/node/.ssh && \
+    chown -R node:node /home/node && \
+    chmod 700 /home/node/.ssh
 
 # Set up environment variables - but stay as root
 ENV NPM_CONFIG_PREFIX=/root/.npm-global

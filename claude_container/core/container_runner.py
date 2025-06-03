@@ -197,7 +197,7 @@ class ContainerRunner:
         # Mount SSH directory if it exists (for git operations)
         ssh_dir = Path.home() / '.ssh'
         if ssh_dir.exists():
-            volumes[str(ssh_dir)] = {'bind': '/root/.ssh', 'mode': 'ro'}
+            volumes[str(ssh_dir)] = {'bind': '/home/node/.ssh', 'mode': 'ro'}
         
         # Mount GitHub CLI config if it exists
         gh_config_dir = Path.home() / '.config' / 'gh'
@@ -352,11 +352,11 @@ class ContainerRunner:
         
         # If command is a string, keep it as a string for proper shell execution
         if isinstance(command, str):
-            # Use su to switch to the specified user with the command as a single string
-            command_with_user = ['su', '-', user, '-c', command]
+            # Use su without - to preserve current directory
+            command_with_user = ['su', user, '-c', command]
         else:
             # If command is a list, join it properly for shell execution
             shell_command = ' '.join(command)
-            command_with_user = ['su', '-', user, '-c', shell_command]
+            command_with_user = ['su', user, '-c', shell_command]
         
         return container.exec_run(command_with_user, **kwargs)

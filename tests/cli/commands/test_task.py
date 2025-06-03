@@ -106,6 +106,8 @@ class TestTaskCommand:
         mock_runner.exec_in_container_as_user.side_effect = [
             # Permission check
             create_exec_result(0, b"test"),
+            # git config --global --add safe.directory /workspace
+            create_exec_result(0, b""),
             # git branch --show-current (check current branch)
             create_exec_result(0, b"feature-branch"),
             # git checkout master

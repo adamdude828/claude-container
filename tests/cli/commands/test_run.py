@@ -27,7 +27,7 @@ class TestRunCommand:
         # Verify
         assert result.exit_code == 0
         assert "Running in container with Claude Code" in result.output
-        mock_runner.run_command.assert_called_once_with(['echo', 'hello'])
+        mock_runner.run_command.assert_called_once_with(['echo', 'hello'], user='node')
     
     def test_run_command_no_container(self, cli_runner):
         """Test run command when no container exists."""
@@ -66,7 +66,7 @@ class TestRunCommand:
         
         # Verify
         assert result.exit_code == 0
-        mock_runner.run_command.assert_called_once_with(['python', '-c', 'print("Hello, World!")'])
+        mock_runner.run_command.assert_called_once_with(['python', '-c', 'print("Hello, World!")'], user='node')
     
     @patch('claude_container.cli.commands.run.ContainerRunner')
     @patch('claude_container.cli.commands.run.DockerClient')
@@ -86,7 +86,7 @@ class TestRunCommand:
         
         # Verify - should call run_command with empty list
         assert result.exit_code == 0
-        mock_runner.run_command.assert_called_once_with([])
+        mock_runner.run_command.assert_called_once_with([], user='node')
     
     def test_run_command_help(self, cli_runner):
         """Test run command help."""

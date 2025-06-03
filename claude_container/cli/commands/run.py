@@ -30,6 +30,6 @@ def run(command):
     
     click.echo("Running in container with Claude Code")
     
-    # Run the command
+    # Run the command as node user
     runner = ContainerRunner(project_root, data_dir, image_name)
-    runner.run_command(list(command))
+    runner.run_command(list(command), user='node')
