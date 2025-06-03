@@ -58,8 +58,8 @@ class TestLoginCommand:
             assert "Opening bash shell" in result.output
             assert "Run 'claude login'" in result.output
             
-            # Verify run_command was called with bash
-            mock_runner.run_command.assert_called_once_with(['/bin/bash'])
+            # Verify run_command was called with bash and node user
+            mock_runner.run_command.assert_called_once_with(['/bin/bash'], user='node')
     
     def test_login_help(self, cli_runner):
         """Test login command help."""

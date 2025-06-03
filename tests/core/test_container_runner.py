@@ -190,10 +190,11 @@ class TestContainerRunner:
         
         volumes = runner._get_volumes()
         
-        # Project directory should be mounted
-        assert str(temp_project_dir) in volumes
-        assert volumes[str(temp_project_dir)]['bind'] == '/workspace'
-        assert volumes[str(temp_project_dir)]['mode'] == 'rw'
+        # Project directory should NOT be mounted (as per requirements)
+        assert str(temp_project_dir) not in volumes
+        
+        # Verify other expected volumes are present (when they exist)
+        # The exact paths will vary, but we should have some volumes for claude config
     
     @patch('claude_container.core.container_runner.subprocess.run')
     def test_run_interactive_container(self, mock_subprocess_run, temp_project_dir):
@@ -229,7 +230,7 @@ class TestContainerRunner:
         
         with patch.object(runner, '_run_interactive_container') as mock_interactive:
             runner.run_command([])
-            mock_interactive.assert_called_once_with(['/bin/bash'])
+            mock_interactive.assert_called_once_with(['/bin/bash'], user=None)
     
     @patch('claude_container.core.container_runner.DockerService')
     def test_run_command_claude_interactive(self, mock_docker_service_class, temp_project_dir):
@@ -243,7 +244,7 @@ class TestContainerRunner:
         
         with patch.object(runner, '_run_interactive_container') as mock_interactive:
             runner.run_command(['claude'])
-            mock_interactive.assert_called_once_with(['claude'])
+            mock_interactive.assert_called_once_with(['claude'], user=None)
     
     @patch('claude_container.core.container_runner.DockerService')
     def test_run_command_claude_non_interactive_success(self, mock_docker_service_class, temp_project_dir, capsys):

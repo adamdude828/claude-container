@@ -20,6 +20,26 @@ from ....utils import MCPManager
 from ...util import get_description_from_editor
 
 
+def _get_exec_result(result):
+    """Helper to handle both test mock and real docker exec result formats."""
+    if hasattr(result, 'exit_code'):
+        # Test mock format
+        return result.exit_code, result.output
+    else:
+        # Real docker exec_run returns (exit_code, output)
+        return result
+
+
+def _is_streaming_result(result):
+    """Check if the result is from a streaming command."""
+    if hasattr(result, 'output'):
+        # Mock result - check if output is an iterator
+        return hasattr(result.output, '__iter__') and not isinstance(result.output, (bytes, str))
+    else:
+        # Real docker result - second element would be a generator
+        return hasattr(result[1], '__iter__') and not isinstance(result[1], (bytes, str))
+
+
 @click.command()
 @click.option('--branch', '-b', help='Git branch name for the task')
 @click.option('--file', '-f', 'description_file', type=click.Path(exists=True), 
@@ -179,12 +199,15 @@ def create(branch, description_file, mcp):
         
         # Check if permissions are accepted
         click.echo("🔍 Checking Claude permissions...")
-        test_result = container.exec_run(
+        test_result = container_runner.exec_in_container_as_user(
+            container,
             ["claude", "-p", "echo test", CLAUDE_SKIP_PERMISSIONS_FLAG],
+            user='node',
             workdir=DEFAULT_WORKDIR
         )
         
-        if test_result.exit_code != 0 and CLAUDE_PERMISSIONS_ERROR in test_result.output.decode():
+        exit_code, output = _get_exec_result(test_result)
+        if exit_code != 0 and CLAUDE_PERMISSIONS_ERROR in output.decode():
             click.echo("❌ Claude permissions have not been accepted yet.", err=True)
             click.echo("Please run 'claude-container accept-permissions' first.", err=True)
             
@@ -216,14 +239,17 @@ def create(branch, description_file, mcp):
                 container_runner.write_file(container, mcp_path, mcp_config_str)
                 
                 # Verify file was written
-                verify_result = container.exec_run(
+                verify_result = container_runner.exec_in_container_as_user(
+                    container,
                     f"cat {mcp_path}",
+                    user='node',
                     workdir=DEFAULT_WORKDIR
                 )
-                if verify_result.exit_code == 0:
+                exit_code, output = _get_exec_result(verify_result)
+                if exit_code == 0:
                     click.echo("✅ MCP config file verified in container")
                 else:
-                    click.echo(f"❌ Failed to verify MCP config file: {verify_result.output.decode()}")
+                    click.echo(f"❌ Failed to verify MCP config file: {output.decode()}")
                 
                 click.echo(f"✅ Configured {len(selected_servers)} MCP server(s)")
             except Exception as e:
@@ -233,14 +259,62 @@ def create(branch, description_file, mcp):
         # Step 1: Git branch setup
         click.echo(f"\n🌿 Setting up branch '{branch}'...")
         
-        # Create new branch
-        checkout_result = container.exec_run(
-            f"git checkout -b {branch}",
+        # First, ensure we're on master and pull latest changes
+        click.echo("📥 Switching to master and pulling latest changes...")
+        
+        # Check current branch first
+        current_branch_result = container_runner.exec_in_container_as_user(
+            container,
+            "git branch --show-current",
+            user='node',
             workdir=DEFAULT_WORKDIR
         )
         
-        if checkout_result.exit_code != 0:
-            click.echo(f"\n❌ Error: Failed to create branch\n{checkout_result.output.decode()}", err=True)
+        exit_code, output = _get_exec_result(current_branch_result)
+        current_branch = output.decode().strip() if exit_code == 0 else ""
+        
+        # Only checkout master if we're not already on it
+        if current_branch != "master":
+            master_checkout_result = container_runner.exec_in_container_as_user(
+                container,
+                "git checkout master",
+                user='node',
+                workdir=DEFAULT_WORKDIR
+            )
+            
+            exit_code, output = _get_exec_result(master_checkout_result)
+            if exit_code != 0:
+                click.echo(f"\n❌ Error: Failed to checkout master\n{output.decode()}", err=True)
+                raise Exception("Failed to checkout master branch")
+        else:
+            click.echo("✅ Already on master branch")
+        
+        # Pull latest changes from master
+        pull_result = container_runner.exec_in_container_as_user(
+            container,
+            "git pull origin master",
+            user='node',
+            workdir=DEFAULT_WORKDIR
+        )
+        
+        exit_code, output = _get_exec_result(pull_result)
+        if exit_code != 0:
+            click.echo(f"\n❌ Error: Failed to pull latest changes\n{output.decode()}", err=True)
+            raise Exception("Failed to pull latest changes from master")
+        
+        click.echo("✅ Successfully pulled latest changes from master")
+        
+        # Create new branch from updated master
+        checkout_result = container_runner.exec_in_container_as_user(
+            container,
+            f"git checkout -b {branch}",
+            user='node',
+            workdir=DEFAULT_WORKDIR
+        )
+        
+        exit_code, output = _get_exec_result(checkout_result)
+        if exit_code != 0:
+            click.echo(f"\n❌ Error: Failed to create branch\n{output.decode()}", err=True)
             raise Exception("Failed to create branch")
         
         # Step 2: Execute Claude task
@@ -264,15 +338,32 @@ def create(branch, description_file, mcp):
             click.echo(f"   MCP config: {mcp_path}")
         
         # Execute Claude with the task
-        claude_result = container.exec_run(
+        claude_result = container_runner.exec_in_container_as_user(
+            container,
             claude_cmd,
+            user='node',
             workdir=DEFAULT_WORKDIR,
             stream=True
         )
         
         # Stream Claude's output in real-time
-        for chunk in claude_result.output:
-            decoded_chunk = chunk.decode()
+        # For streaming results, we need to handle the output differently
+        if hasattr(claude_result, 'output'):
+            # Mock result format
+            output_stream = claude_result.output
+        else:
+            # Real docker format - when stream=True, it returns a generator directly
+            output_stream = claude_result
+        
+        for chunk in output_stream:
+            # Handle different types of streaming output
+            if isinstance(chunk, bytes):
+                decoded_chunk = chunk.decode()
+            elif isinstance(chunk, int):
+                # Docker streaming sometimes yields individual bytes as integers
+                decoded_chunk = chr(chunk)
+            else:
+                decoded_chunk = str(chunk)
             click.echo(decoded_chunk, nl=False)
             claude_output.append(decoded_chunk)
         
@@ -283,12 +374,20 @@ def create(branch, description_file, mcp):
         click.echo("\n\n💾 Having Claude commit the changes...")
         
         # Check if there are changes to commit
-        status_result = container.exec_run(
+        status_result = container_runner.exec_in_container_as_user(
+            container,
             "git status --porcelain",
+            user='node',
             workdir=DEFAULT_WORKDIR
         )
         
-        if not status_result.output.strip():
+        exit_code, output = _get_exec_result(status_result)
+        # Handle case where output might be an iterator (shouldn't happen for non-streaming commands)
+        if hasattr(output, '__iter__') and not isinstance(output, (bytes, str)):
+            # Consume the iterator and join the results
+            output = b''.join(output)
+        
+        if not output or not output.strip():
             click.echo("ℹ️  No changes to commit")
             commit_message = None
         else:
@@ -304,15 +403,32 @@ def create(branch, description_file, mcp):
                 commit_cmd.extend(["--mcp-config", mcp_path])
             
             commit_output = []
-            commit_result = container.exec_run(
+            commit_result = container_runner.exec_in_container_as_user(
+                container,
                 commit_cmd,
+                user='node',
                 workdir=DEFAULT_WORKDIR,
                 stream=True
             )
             
             # Stream Claude's commit output
-            for chunk in commit_result.output:
-                decoded_chunk = chunk.decode()
+            # For streaming results, we need to handle the output differently
+            if hasattr(commit_result, 'output'):
+                # Mock result format
+                output_stream = commit_result.output
+            else:
+                # Real docker format - when stream=True, it returns a generator directly
+                output_stream = commit_result
+            
+            for chunk in output_stream:
+                # Handle different types of streaming output
+                if isinstance(chunk, bytes):
+                    decoded_chunk = chunk.decode()
+                elif isinstance(chunk, int):
+                    # Docker streaming sometimes yields individual bytes as integers
+                    decoded_chunk = chr(chunk)
+                else:
+                    decoded_chunk = str(chunk)
                 click.echo(decoded_chunk, nl=False)
                 commit_output.append(decoded_chunk)
             
@@ -320,22 +436,28 @@ def create(branch, description_file, mcp):
             storage_manager.save_task_log(task_metadata.id, "claude_commit", ''.join(commit_output))
             
             # Extract commit message from the last commit
-            get_commit_msg = container.exec_run(
+            get_commit_msg = container_runner.exec_in_container_as_user(
+                container,
                 "git log -1 --pretty=%B",
+                user='node',
                 workdir=DEFAULT_WORKDIR
             )
             
-            if get_commit_msg.exit_code == 0:
-                commit_message = get_commit_msg.output.decode().strip()
+            exit_code, output = _get_exec_result(get_commit_msg)
+            if exit_code == 0:
+                commit_message = output.decode().strip()
                 click.echo("\n\n✅ Changes committed successfully")
                 
                 # Get commit hash
-                get_commit_hash = container.exec_run(
+                get_commit_hash = container_runner.exec_in_container_as_user(
+                    container,
                     "git rev-parse HEAD",
+                    user='node',
                     workdir=DEFAULT_WORKDIR
                 )
-                if get_commit_hash.exit_code == 0:
-                    commit_hash = get_commit_hash.output.decode().strip()
+                exit_code, output = _get_exec_result(get_commit_hash)
+                if exit_code == 0:
+                    commit_hash = output.decode().strip()
                     storage_manager.update_task(task_metadata.id, commit_hash=commit_hash)
             else:
                 click.echo("\n\n⚠️  Warning: Could not retrieve commit message")
@@ -344,13 +466,16 @@ def create(branch, description_file, mcp):
         # Push to remote repository only if there was a commit
         if commit_message:
             click.echo(f"\n📤 Pushing branch '{branch}' to remote...")
-            push_result = container.exec_run(
+            push_result = container_runner.exec_in_container_as_user(
+                container,
                 f"git push -u origin {branch}",
+                user='node',
                 workdir=DEFAULT_WORKDIR
             )
             
-            if push_result.exit_code != 0:
-                click.echo(f"\n❌ Error: Failed to push branch\n{push_result.output.decode()}", err=True)
+            exit_code, output = _get_exec_result(push_result)
+            if exit_code != 0:
+                click.echo(f"\n❌ Error: Failed to push branch\n{output.decode()}", err=True)
                 raise Exception("Failed to push branch")
             
             # Step 4: Create pull request

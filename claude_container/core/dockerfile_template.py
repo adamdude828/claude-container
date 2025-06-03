@@ -29,8 +29,8 @@ RUN npm install -g @anthropic-ai/claude-code
 
 {custom_commands}
 
-# Copy project code (always included)
-COPY . /workspace
+# Copy project code (always included) with proper ownership
+COPY --chown=node:node . /workspace
 
 # Configure git safe directory as root
 RUN git config --global --add safe.directory /workspace && \

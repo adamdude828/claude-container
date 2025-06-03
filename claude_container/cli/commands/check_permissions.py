@@ -44,7 +44,8 @@ def check_permissions():
             tty=False,
             stdin_open=False,
             detach=True,
-            remove=False
+            remove=False,
+            user='node'
         )
         
         config['labels'] = {"claude-container": "true", "claude-container-type": "permission-check"}
