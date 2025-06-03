@@ -9,22 +9,18 @@ ARG GIT_USER_NAME
 # Install required system packages (minimal for now)
 RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
-# Create node user's directories (node user already exists in the base image)
-RUN mkdir -p /home/node/.npm-global && \
+# Create necessary directories
+RUN mkdir -p /root/.npm-global && \
     mkdir -p /workspace && \
     mkdir -p /root && \
-    chmod 777 /root && \
-    chown -R node:node /home/node /workspace
+    chmod 777 /root
 
-# Switch to node user
-USER node
+# Set up environment variables - but stay as root
+ENV NPM_CONFIG_PREFIX=/root/.npm-global
+ENV PATH="/root/.npm-global/bin:$PATH"
+ENV HOME=/root
 
-# Set up environment variables for node user
-ENV NPM_CONFIG_PREFIX=/home/node/.npm-global
-ENV PATH="/home/node/.npm-global/bin:$PATH"
-ENV HOME=/home/node
-
-# Install Claude Code globally as node user
+# Install Claude Code globally as root
 RUN npm install -g @anthropic-ai/claude-code
 
 {runtime_overrides}
@@ -34,15 +30,9 @@ RUN npm install -g @anthropic-ai/claude-code
 {custom_commands}
 
 # Copy project code (always included)
-COPY --chown=node:node . /workspace
+COPY . /workspace
 
-# Configure git safe directory for root
-USER root
-RUN git config --global --add safe.directory /workspace && \
-    git config --global --add safe.directory '*'
-
-# Switch to node user for git operations and configuration
-USER node
+# Configure git safe directory as root
 RUN git config --global --add safe.directory /workspace && \
     git config --global --add safe.directory '*' && \
     if [ -n "$GIT_USER_EMAIL" ] && [ -n "$GIT_USER_NAME" ]; then \

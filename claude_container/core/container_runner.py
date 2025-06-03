@@ -23,9 +23,9 @@ class ContainerRunner:
     def _get_container_environment(self, auto_approve: bool = False) -> Dict[str, str]:
         """Get standard environment variables for container."""
         env = {
-            'CLAUDE_CONFIG_DIR': '/home/node/.claude',
+            'CLAUDE_CONFIG_DIR': '/root/.claude',
             'NODE_OPTIONS': '--max-old-space-size=4096',
-            'HOME': '/home/node'
+            'HOME': '/root'
         }
             
         if auto_approve:
@@ -186,29 +186,32 @@ class ContainerRunner:
         # Mount Claude directory if it exists
         claude_dir = Path.home() / '.claude'
         if claude_dir.exists():
-            volumes[str(claude_dir)] = {'bind': '/home/node/.claude', 'mode': 'rw'}
+            volumes[str(claude_dir)] = {'bind': '/root/.claude', 'mode': 'rw'}
         
         # Mount .claude.json file if it exists (this is where auth is stored)
         claude_json = Path.home() / '.claude.json'
         if claude_json.exists():
-            volumes[str(claude_json)] = {'bind': '/home/node/.claude.json', 'mode': 'rw'}
+            volumes[str(claude_json)] = {'bind': '/root/.claude.json', 'mode': 'rw'}
         
         # Mount .config/claude directory if it exists (this is where auth is stored)
         config_claude_dir = Path.home() / '.config' / 'claude'
         if config_claude_dir.exists():
-            volumes[str(config_claude_dir)] = {'bind': '/home/node/.config/claude', 'mode': 'rw'}
+            volumes[str(config_claude_dir)] = {'bind': '/root/.config/claude', 'mode': 'rw'}
         
         # Mount SSH directory if it exists (for git operations)
         ssh_dir = Path.home() / '.ssh'
         if ssh_dir.exists():
-            volumes[str(ssh_dir)] = {'bind': '/home/node/.ssh', 'mode': 'ro'}
+            volumes[str(ssh_dir)] = {'bind': '/root/.ssh', 'mode': 'ro'}
         
         # Mount GitHub CLI config if it exists
         gh_config_dir = Path.home() / '.config' / 'gh'
         if gh_config_dir.exists():
-            volumes[str(gh_config_dir)] = {'bind': '/home/node/.config/gh', 'mode': 'ro'}
+            volumes[str(gh_config_dir)] = {'bind': '/root/.config/gh', 'mode': 'ro'}
         
         # No need to mount npm global directory since Claude Code is installed in the container
+        
+        # Mount project directory
+        volumes[str(self.project_root)] = {'bind': DEFAULT_WORKDIR, 'mode': 'rw'}
         
         return volumes
     
