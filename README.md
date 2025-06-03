@@ -336,6 +336,32 @@ If the container build fails, check:
 - Check Docker status with: `docker info`
 - Ensure Docker daemon socket is accessible
 
+### Customize environments for non-Node.js projects
+
+The `customize` command allows you to interactively modify the container environment, perfect for projects that need additional dependencies or non-Node.js setups.
+
+```bash
+# Enter container interactively to install dependencies
+claude-container customize
+
+# Customize with a specific base image
+claude-container customize --base-image python:3.11
+
+# Customize without saving changes (dry run)
+claude-container customize --no-commit
+
+# Customize and save with a specific tag
+claude-container customize --tag my-project-custom
+```
+
+Inside the customize session, you can:
+- Install system packages: `apt-get install postgresql-client`
+- Set up Python environments: `pip install -r requirements.txt`
+- Configure databases or other services
+- Install language-specific tools
+
+When you exit the container, your changes are automatically saved as a new image that will be used by `claude-container run` and other commands.
+
 ## How it Works
 
 Claude Container creates a Docker container based on the Universal Codex Dockerfile with:
