@@ -17,6 +17,7 @@ from claude_container.cli.helpers import (
 from ....core.constants import DEFAULT_WORKDIR, MCP_CONFIG_PATH, CLAUDE_SKIP_PERMISSIONS_FLAG, CLAUDE_PERMISSIONS_ERROR
 from ....models.task import TaskStatus
 from ....utils import MCPManager
+from ....services.git_service import GitService, GitServiceError
 from ...util import get_description_from_editor
 
 
@@ -258,6 +259,18 @@ def create(branch, description_file, mcp):
         
         # Step 1: Git branch setup
         click.echo(f"\n🌿 Setting up branch '{branch}'...")
+        
+        # Configure git to trust the workspace directory
+        click.echo("🔧 Configuring git safe directory...")
+        git_config_result = container_runner.exec_in_container_as_user(
+            container,
+            "git config --global --add safe.directory /workspace",
+            user='node',
+            workdir=DEFAULT_WORKDIR
+        )
+        exit_code, output = _get_exec_result(git_config_result)
+        if exit_code != 0:
+            click.echo(f"⚠️  Warning: Failed to configure git safe directory: {output.decode()}")
         
         # First, ensure we're on master and pull latest changes
         click.echo("📥 Switching to master and pulling latest changes...")

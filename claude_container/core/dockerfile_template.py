@@ -32,12 +32,16 @@ RUN npm install -g @anthropic-ai/claude-code
 # Copy project code (always included) with proper ownership
 COPY --chown=node:node . /workspace
 
-# Configure git safe directory as root
+# Configure git safe directory and user info for both root and node users
 RUN git config --global --add safe.directory /workspace && \
     git config --global --add safe.directory '*' && \
     if [ -n "$GIT_USER_EMAIL" ] && [ -n "$GIT_USER_NAME" ]; then \
         git config --global user.email "$GIT_USER_EMAIL" && \
-        git config --global user.name "$GIT_USER_NAME"; \
+        git config --global user.name "$GIT_USER_NAME" && \
+        su - node -c "git config --global user.email '$GIT_USER_EMAIL'" && \
+        su - node -c "git config --global user.name '$GIT_USER_NAME'" && \
+        su - node -c "git config --global --add safe.directory /workspace" && \
+        su - node -c "git config --global --add safe.directory '*'"; \
     fi && \
     cd /workspace && \
     if [ -d .git ]; then \

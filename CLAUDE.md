@@ -63,11 +63,11 @@ poetry run pytest
 ### Container Runner Architecture
 The `ContainerRunner` class provides unified container configuration:
 - **Consistent Volume Mounts**: All commands use the same mounts including:
-  - Project directory → `/workspace`
   - `.claude.json` → `/home/node/.claude.json` (read-write)
   - `.claude/` → `/home/node/.claude/` (read-write)
   - `.config/claude/` → `/home/node/.config/claude/` (read-write)
   - SSH, Git, and GitHub CLI configs (read-only)
+- **Project Code Transfer**: The project directory is COPIED into `/workspace` during the build process (not mounted)
 - **Unified Environment**: Standard environment variables for all containers
 - **Execution Modes**:
   - Interactive commands use subprocess for proper TTY handling
