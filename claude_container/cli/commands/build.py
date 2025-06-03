@@ -15,8 +15,13 @@ from ...core.constants import CONTAINER_PREFIX
 @click.option('--no-cache', is_flag=True, help='Build without using Docker cache (rebuilds all layers)')
 @click.option('--tag', help='Tag for the container image')
 @click.option('--claude-code-path', envvar='CLAUDE_CODE_PATH', help='Path to Claude Code executable')
-def build(force_rebuild, no_cache, tag, claude_code_path):
-    """Build Docker container with project code included"""
+@click.option('--minimal', is_flag=True, help='Build minimal container without project code')
+def build(force_rebuild, no_cache, tag, claude_code_path, minimal):
+    """Build Docker container for the project.
+    
+    By default, builds a container with your project code included.
+    Use --minimal to build an empty container without code.
+    """
     project_root, data_dir = get_project_context()
     data_dir.mkdir(exist_ok=True)
     
@@ -32,7 +37,10 @@ def build(force_rebuild, no_cache, tag, claude_code_path):
         click.echo(f"Image {tag} already exists. Use --force-rebuild to rebuild.")
         return
     
-    click.echo(f"Building container for project: {project_root}")
+    if minimal:
+        click.echo(f"Building minimal container (without code) for project: {project_root}")
+    else:
+        click.echo(f"Building container for project: {project_root}")
     
     # Check git configuration
     try:
@@ -66,8 +74,8 @@ def build(force_rebuild, no_cache, tag, claude_code_path):
         config = ContainerConfig()
         config_manager.save_container_config(config)
     
-    # Update config to include code
-    config.include_code = True
+    # Update config based on minimal flag
+    config.include_code = not minimal
     config.cached_image_tag = tag
     config_manager.save_container_config(config)
     
@@ -76,7 +84,7 @@ def build(force_rebuild, no_cache, tag, claude_code_path):
     from ...core.constants import DOCKERFILE_NAME
     
     generator = DockerfileGenerator(project_root)
-    dockerfile_content = generator.generate_cached(include_code=True)
+    dockerfile_content = generator.generate_cached(include_code=not minimal)
     
     temp_dockerfile = data_dir / DOCKERFILE_NAME
     dockerignore_path = project_root / '.dockerignore'
@@ -84,8 +92,8 @@ def build(force_rebuild, no_cache, tag, claude_code_path):
     dockerignore_moved = False
     
     try:
-        # Temporarily move .dockerignore if it exists
-        if dockerignore_path.exists():
+        # Temporarily move .dockerignore if it exists (only for non-minimal builds)
+        if not minimal and dockerignore_path.exists():
             click.echo("📦 Found .dockerignore - temporarily moving it to ensure complete project copy...")
             dockerignore_path.rename(dockerignore_backup)
             dockerignore_moved = True

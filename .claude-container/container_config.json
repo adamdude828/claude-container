@@ -11,8 +11,8 @@
   ],
   "custom_commands": [],
   "base_image": "node:20",
-  "include_code": true,
+  "include_code": false,
   "cached_image_tag": "claude-container-claude-local",
   "customized": true,
-  "customized_at": "2025-06-03T05:23:37.803314"
+  "customized_at": "2025-06-03T16:33:29.926316"
 }

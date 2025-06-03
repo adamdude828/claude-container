@@ -14,6 +14,7 @@ from .commands.task import task
 from .commands.adapt import adapt
 from .commands.mcp import mcp
 from .commands.customize import customize
+from .commands.copy import copy
 
 
 @click.group()
@@ -35,6 +36,7 @@ cli.add_command(task)
 cli.add_command(adapt)
 cli.add_command(mcp)
 cli.add_command(customize)
+cli.add_command(copy)
 
 
 if __name__ == '__main__':
