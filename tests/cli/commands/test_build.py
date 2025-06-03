@@ -151,3 +151,50 @@ class TestBuildCommand:
         assert "Build Docker container" in result.output
         assert "--force-rebuild" in result.output
         assert "--tag" in result.output
+    
+    @patch('claude_container.cli.commands.build.subprocess.check_output')
+    @patch('claude_container.cli.commands.build.get_docker_client')
+    @patch('claude_container.cli.commands.build.ConfigManager')
+    @patch('claude_container.core.dockerfile_generator.DockerfileGenerator')
+    @patch('claude_container.cli.commands.build.PathFinder')
+    def test_build_command_moves_dockerignore(self, mock_path_finder_class, mock_generator_class, 
+                                  mock_config_manager_class, mock_get_docker_client, mock_subprocess, cli_runner):
+        """Test that build command temporarily moves .dockerignore file."""
+        # Setup git config mocks
+        mock_subprocess.side_effect = ["test@example.com", "Test User"]
+        
+        # Setup mocks
+        mock_docker = MagicMock()
+        mock_docker.image_exists.return_value = False
+        mock_get_docker_client.return_value = mock_docker
+        
+        mock_path_finder = MagicMock()
+        mock_path_finder.find_claude_code.return_value = "/usr/local/bin/claude"
+        mock_path_finder_class.return_value = mock_path_finder
+        
+        mock_config_manager = MagicMock()
+        mock_config = MagicMock()
+        mock_config_manager.get_container_config.return_value = mock_config
+        mock_config_manager_class.return_value = mock_config_manager
+        
+        mock_generator = MagicMock()
+        mock_generator.generate_cached.return_value = "FROM python:3.10\nCOPY . /app"
+        mock_generator_class.return_value = mock_generator
+        
+        # Run command with .dockerignore present
+        with cli_runner.isolated_filesystem():
+            Path(".claude-container").mkdir()
+            dockerignore = Path(".dockerignore")
+            dockerignore.write_text(".git\nnode_modules\n")
+            
+            result = cli_runner.invoke(build, [])
+            
+            # Verify .dockerignore was restored
+            assert dockerignore.exists()
+            assert dockerignore.read_text() == ".git\nnode_modules\n"
+            assert not Path(".dockerignore.claude-backup").exists()
+        
+        # Verify output mentions moving dockerignore
+        assert result.exit_code == 0
+        assert "Found .dockerignore - temporarily moving" in result.output
+        assert "Restored .dockerignore file" in result.output

@@ -79,7 +79,17 @@ def build(force_rebuild, no_cache, tag, claude_code_path):
     dockerfile_content = generator.generate_cached(include_code=True)
     
     temp_dockerfile = data_dir / DOCKERFILE_NAME
+    dockerignore_path = project_root / '.dockerignore'
+    dockerignore_backup = project_root / '.dockerignore.claude-backup'
+    dockerignore_moved = False
+    
     try:
+        # Temporarily move .dockerignore if it exists
+        if dockerignore_path.exists():
+            click.echo("📦 Found .dockerignore - temporarily moving it to ensure complete project copy...")
+            dockerignore_path.rename(dockerignore_backup)
+            dockerignore_moved = True
+        
         # Write Dockerfile
         temp_dockerfile.write_text(dockerfile_content)
         
@@ -121,3 +131,12 @@ def build(force_rebuild, no_cache, tag, claude_code_path):
         click.echo(f"Build failed: {e}")
         click.echo(f"Dockerfile saved at: {temp_dockerfile}")
         raise
+    finally:
+        # Always restore .dockerignore if we moved it
+        if dockerignore_moved and dockerignore_backup.exists():
+            try:
+                dockerignore_backup.rename(dockerignore_path)
+                click.echo("✅ Restored .dockerignore file")
+            except Exception as e:
+                click.echo(f"⚠️  Warning: Could not restore .dockerignore: {e}", err=True)
+                click.echo(f"   Backup is at: {dockerignore_backup}", err=True)
