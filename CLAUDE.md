@@ -13,6 +13,7 @@ Claude Container is a Docker container system for Claude Code that enables:
   1. Implemented unified container configuration system
   2. Fixed interactive shell support for login and run commands
   3. Improved error handling with proper stderr output
+  4. Added `adapt` command to convert existing Docker images/compose services for Claude Code
 - **Next Steps**: 
   1. Implement synchronous task functionality
   2. Add asynchronous task support with daemon
@@ -24,6 +25,7 @@ Claude Container is a Docker container system for Claude Code that enables:
 - `claude-container login` - Open interactive shell for Claude authentication
 - `claude-container auth-check` - Verify Claude authentication status
 - `claude-container task` - Submit background tasks (to be implemented)
+- `claude-container adapt` - Adapt existing Docker images or docker-compose services for Claude Code
 
 ## Testing Commands
 ```bash
@@ -85,3 +87,36 @@ claude-container task "Implement feature X"
 # Claude works in background
 # Automatically creates PR when complete
 ```
+
+## Adapt Command Usage
+The `adapt` command allows you to take existing Docker images or docker-compose services and make them Claude Code compatible:
+
+### From Docker Image:
+```bash
+# Adapt an existing Docker image
+claude-container adapt --image ubuntu:22.04
+
+# With custom tag
+claude-container adapt --image myapp:latest --tag myapp-claude
+```
+
+### From Docker Compose:
+```bash
+# Build and adapt from docker-compose service
+claude-container adapt --compose-file docker-compose.yml --service web
+
+# Build without cache
+claude-container adapt -f docker-compose.yml -s web --no-cache
+```
+
+The command will:
+1. Use the specified base image or build from docker-compose
+2. Start an interactive container session
+3. Guide you to install Claude Code following: https://docs.anthropic.com/en/docs/claude-code/getting-started
+4. Save your changes to a new tagged image when you exit
+
+Key installation steps in the container:
+- Install Node.js if not present
+- Install Claude Code: `npm install -g @anthropic-ai/claude-code`
+- Make any other necessary environment changes
+- Exit to save changes
