@@ -102,8 +102,8 @@ class TestContainerRunner:
         
         # Check environment variables
         env = call_kwargs['environment']
-        assert env['CLAUDE_CONFIG_DIR'] == '/home/node/.claude'
-        assert env['HOME'] == '/home/node'
+        assert env['CLAUDE_CONFIG_DIR'] == '/root/.claude'
+        assert env['HOME'] == '/root'
         assert env['NODE_OPTIONS'] == '--max-old-space-size=4096'
     
     def test_get_container_environment(self, temp_project_dir):
@@ -113,9 +113,9 @@ class TestContainerRunner:
         
         # Test without auto_approve
         env = runner._get_container_environment(auto_approve=False)
-        assert env['CLAUDE_CONFIG_DIR'] == '/home/node/.claude'
+        assert env['CLAUDE_CONFIG_DIR'] == '/root/.claude'
         assert env['NODE_OPTIONS'] == '--max-old-space-size=4096'
-        assert env['HOME'] == '/home/node'
+        assert env['HOME'] == '/root'
         assert 'CLAUDE_AUTO_APPROVE' not in env
         
         # Test with auto_approve
@@ -190,8 +190,10 @@ class TestContainerRunner:
         
         volumes = runner._get_volumes()
         
-        # Project directory should NOT be mounted anymore
-        assert str(temp_project_dir) not in volumes
+        # Project directory should be mounted
+        assert str(temp_project_dir) in volumes
+        assert volumes[str(temp_project_dir)]['bind'] == '/workspace'
+        assert volumes[str(temp_project_dir)]['mode'] == 'rw'
     
     @patch('claude_container.core.container_runner.subprocess.run')
     def test_run_interactive_container(self, mock_subprocess_run, temp_project_dir):
