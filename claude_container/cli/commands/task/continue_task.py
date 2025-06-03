@@ -10,7 +10,7 @@ import questionary
 from rich.console import Console
 
 from ....core.container_runner import ContainerRunner
-from ....core.constants import CONTAINER_PREFIX, DATA_DIR_NAME, DEFAULT_WORKDIR, LIBERAL_SETTINGS_JSON, MCP_CONFIG_PATH
+from ....core.constants import CONTAINER_PREFIX, DATA_DIR_NAME, DEFAULT_WORKDIR, MCP_CONFIG_PATH, CLAUDE_SKIP_PERMISSIONS_FLAG, CLAUDE_PERMISSIONS_ERROR
 from ....core.task_storage import TaskStorageManager
 from ....models.task import TaskStatus
 from ....utils import MCPManager
@@ -116,10 +116,21 @@ def continue_task(task_identifier, feedback, feedback_file, mcp):
         container = container_runner.create_persistent_container("task")
         storage_manager.update_task(task_metadata.id, container_id=container.id)
         
-        # Configure Claude settings
-        container.exec_run(f"mkdir -p {DEFAULT_WORKDIR}/.claude")
-        write_cmd = f"echo '{LIBERAL_SETTINGS_JSON}' > {DEFAULT_WORKDIR}/.claude/settings.local.json"
-        container.exec_run(["sh", "-c", write_cmd])
+        # Check if permissions are accepted
+        click.echo("🔍 Checking Claude permissions...")
+        test_result = container.exec_run(
+            ["claude", "-p", "echo test", CLAUDE_SKIP_PERMISSIONS_FLAG],
+            workdir=DEFAULT_WORKDIR
+        )
+        
+        if test_result.exit_code != 0 and CLAUDE_PERMISSIONS_ERROR in test_result.output.decode():
+            click.echo("❌ Claude permissions have not been accepted yet.", err=True)
+            click.echo("Please run 'claude-container accept-permissions' first.", err=True)
+            
+            # Cleanup container
+            container.stop()
+            container.remove()
+            raise click.Abort()
         
         # Handle MCP server selection
         console = Console()
@@ -159,8 +170,7 @@ def continue_task(task_identifier, feedback, feedback_file, mcp):
                 choices = ["All servers"] + all_servers
                 selected = questionary.checkbox(
                     "Available servers:",
-                    choices=choices,
-                    default=["All servers"]
+                    choices=choices
                 ).ask()
                 
                 if selected is None:
@@ -188,20 +198,40 @@ def continue_task(task_identifier, feedback, feedback_file, mcp):
             # Continue without MCP servers
         
         # Write MCP configuration if servers are selected
+        mcp_path = None
         if selected_servers:
             click.echo("🔧 Configuring MCP servers...")
             try:
                 # Get filtered registry with only selected servers
                 filtered_registry = mcp_manager.filter_registry(selected_servers)
                 mcp_config = filtered_registry.to_mcp_json()
+                mcp_config_str = json.dumps(mcp_config, indent=2)
                 
-                # Write MCP configuration to container
-                mcp_path = f"{DEFAULT_WORKDIR}/{MCP_CONFIG_PATH}"
-                container_runner.write_file(container, mcp_path, json.dumps(mcp_config, indent=2))
+                # Debug: Show MCP configuration
+                click.echo("\n📋 MCP Configuration:")
+                click.echo("-" * 60)
+                click.echo(mcp_config_str)
+                click.echo("-" * 60)
+                
+                # Write MCP configuration to container (outside workspace to avoid commits)
+                mcp_path = f"/tmp/{MCP_CONFIG_PATH}"
+                click.echo(f"\n📝 Writing MCP config to: {mcp_path}")
+                container_runner.write_file(container, mcp_path, mcp_config_str)
+                
+                # Verify file was written
+                verify_result = container.exec_run(
+                    f"cat {mcp_path}",
+                    workdir=DEFAULT_WORKDIR
+                )
+                if verify_result.exit_code == 0:
+                    click.echo("✅ MCP config file verified in container")
+                else:
+                    click.echo(f"❌ Failed to verify MCP config file: {verify_result.output.decode()}")
                 
                 click.echo(f"✅ Configured {len(selected_servers)} MCP server(s)")
             except Exception as e:
                 click.echo(f"⚠️  Warning: Failed to configure MCP servers: {e}", err=True)
+                mcp_path = None
         
         # Fetch latest remote changes first
         click.echo("📥 Fetching latest remote changes...")
@@ -250,9 +280,20 @@ Please continue working on this task based on the feedback provided."""
         click.echo("Claude is working on your task...")
         click.echo("-" * 60 + "\n")
         
+        # Build Claude command with optional MCP config
+        claude_cmd = ["claude", "--model=opus", "-p", full_context, CLAUDE_SKIP_PERMISSIONS_FLAG]
+        if mcp_path:
+            claude_cmd.extend(["--mcp-config", mcp_path])
+        
+        # Debug: Show the full command
+        click.echo("\n🔍 Claude command:")
+        click.echo(f"   {' '.join(claude_cmd[:6])}... [truncated]")
+        if mcp_path:
+            click.echo(f"   MCP config: {mcp_path}")
+        
         claude_output = []
         claude_result = container.exec_run(
-            ["claude", "--model=sonnet", "-p", full_context],
+            claude_cmd,
             workdir=DEFAULT_WORKDIR,
             stream=True
         )
@@ -285,9 +326,14 @@ Please continue working on this task based on the feedback provided."""
             click.echo("\n🤖 Asking Claude to commit the changes...")
             click.echo("-" * 60 + "\n")
             
+            # Build Claude command with optional MCP config
+            commit_cmd = ["claude", "--model=opus", "-p", commit_prompt, CLAUDE_SKIP_PERMISSIONS_FLAG]
+            if mcp_path:
+                commit_cmd.extend(["--mcp-config", mcp_path])
+            
             commit_output = []
             commit_result = container.exec_run(
-                ["claude", "--model=sonnet", "-p", commit_prompt],
+                commit_cmd,
                 workdir=DEFAULT_WORKDIR,
                 stream=True
             )

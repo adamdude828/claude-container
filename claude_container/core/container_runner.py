@@ -302,10 +302,13 @@ class ContainerRunner:
             )
             
             # Check if command succeeded
-            exit_code = result.get('ExitCode', 1)
+            # result is an ExecResult tuple: (exit_code, output)
+            exit_code = result.exit_code if hasattr(result, 'exit_code') else result[0]
             if exit_code != 0:
-                stderr = result.get('stderr', b'').decode('utf-8')
-                raise RuntimeError(f"Failed to write file: {stderr}")
+                output = result.output if hasattr(result, 'output') else result[1]
+                if isinstance(output, bytes):
+                    output = output.decode('utf-8')
+                raise RuntimeError(f"Failed to write file: {output}")
                 
         except Exception as e:
             raise RuntimeError(f"Failed to write file {file_path}: {e}")
