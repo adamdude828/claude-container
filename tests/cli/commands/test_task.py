@@ -63,49 +63,65 @@ class TestTaskCommand:
             
             assert result.exit_code == 1
     
+    @patch('claude_container.cli.commands.task.create.MCPManager')
     @patch('claude_container.cli.commands.task.create.subprocess.run')
     @patch('claude_container.cli.commands.task.create.get_storage_and_runner')
     @patch('claude_container.cli.commands.task.create.ensure_authenticated')
-    def test_create_success(self, mock_auth, mock_get_storage_runner, mock_subprocess, cli_runner, mock_task):
+    def test_create_success(self, mock_auth, mock_get_storage_runner, mock_subprocess, mock_mcp_manager_class, cli_runner, mock_task):
         """Test successful task create."""
         mock_auth.return_value = True
+        
+        # Mock MCP Manager
+        mock_mcp_manager = MagicMock()
+        mock_mcp_manager.list_servers.return_value = []  # No MCP servers
+        mock_mcp_manager_class.return_value = mock_mcp_manager
         
         # Mock get_storage_and_runner to return storage and runner
         mock_storage = MagicMock()
         mock_storage.create_task.return_value = mock_task
         
         mock_runner = MagicMock()
-        mock_runner.project_dir = Path.cwd()
-        mock_runner.docker_client.image_exists.return_value = True
+        mock_runner.project_root = Path.cwd()
+        mock_runner.docker_service = MagicMock()
+        mock_runner.docker_service.image_exists.return_value = True
         
         mock_get_storage_runner.return_value = (mock_storage, mock_runner)
+        
+        # Create a helper to properly mock exec_run results
+        def create_exec_result(exit_code, output, is_stream=False):
+            result = MagicMock()
+            result.exit_code = exit_code
+            if is_stream:
+                # For streaming commands, output should be an iterable that yields bytes
+                result.output = iter(output) if isinstance(output, list) else iter([output])
+            else:
+                result.output = output
+            return result
         
         # Mock container
         mock_container = MagicMock()
         mock_container.id = "container-123"
         mock_container.exec_run.side_effect = [
-            # mkdir -p /workspace/.claude
-            MagicMock(exit_code=0, output=b""),
-            # echo settings > settings.local.json
-            MagicMock(exit_code=0, output=b""),
-            # grep gitignore check
-            MagicMock(exit_code=1, output=b""),  # Not found
-            # echo to gitignore
-            MagicMock(exit_code=0, output=b""),
+            # Permission check
+            create_exec_result(0, b"test"),
+            # git checkout master
+            create_exec_result(0, b"Switched to branch 'master'"),
+            # git pull origin master
+            create_exec_result(0, b"Already up to date."),
             # git checkout -b branch
-            MagicMock(exit_code=0, output=b"Switched to a new branch 'test-branch'"),
-            # claude command - first run
-            MagicMock(exit_code=0, output=[b"Task completed"]),
+            create_exec_result(0, b"Switched to a new branch 'test-branch'"),
+            # claude command - first run (stream=True)
+            create_exec_result(0, [b"Task completed"], is_stream=True),
             # git status --porcelain
-            MagicMock(exit_code=0, output=b"M src/index.js"),
-            # claude command - second run for commit
-            MagicMock(exit_code=0, output=[b"Committing changes"]),
+            create_exec_result(0, b"M src/index.js"),
+            # claude command - second run for commit (stream=True)
+            create_exec_result(0, [b"Committing changes"], is_stream=True),
             # git log -1 --pretty=%B
-            MagicMock(exit_code=0, output=b"Add feature X\n\nImplemented feature X as requested"),
+            create_exec_result(0, b"Add feature X\n\nImplemented feature X as requested"),
             # git rev-parse HEAD
-            MagicMock(exit_code=0, output=b"abc123def456"),
+            create_exec_result(0, b"abc123def456"),
             # git push
-            MagicMock(exit_code=0, output=b"Branch pushed")
+            create_exec_result(0, b"Branch pushed")
         ]
         mock_runner.create_persistent_container.return_value = mock_container
         
@@ -137,6 +153,14 @@ class TestTaskCommand:
                 input="Implement test feature\n"
             )
             
+            if result.exit_code != 0:
+                print(f"Exit code: {result.exit_code}")
+                print(f"Output: {result.output}")
+                print(f"Exception: {result.exception}")
+                import traceback
+                if result.exception:
+                    traceback.print_exception(type(result.exception), result.exception, result.exception.__traceback__)
+            
             assert result.exit_code == 0
             assert "Created task" in result.output
             assert "Starting task on branch 'test-branch'" in result.output
@@ -160,8 +184,9 @@ class TestTaskCommand:
         # Setup storage and runner
         mock_storage = MagicMock()
         mock_runner = MagicMock()
-        mock_runner.project_dir = Path.cwd()
-        mock_runner.docker_client.image_exists.return_value = True
+        mock_runner.project_root = Path.cwd()
+        mock_runner.docker_service = MagicMock()
+        mock_runner.docker_service.image_exists.return_value = True
         mock_get_storage_runner.return_value = (mock_storage, mock_runner)
         
         # Mock subprocess.run calls - branch exists on remote
@@ -217,7 +242,7 @@ class TestTaskCommand:
         
         # Mock ContainerRunner
         mock_runner = MagicMock()
-        mock_runner.docker_client.image_exists.return_value = True
+        mock_runner.docker_service.image_exists.return_value = True
         
         # Mock container
         mock_container = MagicMock()
@@ -227,16 +252,18 @@ class TestTaskCommand:
             MagicMock(exit_code=0, output=b"test"),
             # git fetch --all
             MagicMock(exit_code=0, output=b"Fetching origin"),
+            # git show-ref check for branch
+            MagicMock(exit_code=0, output=b"refs/heads/test-branch"),
             # git checkout branch
             MagicMock(exit_code=0, output=b"Switched to branch 'test-branch'"),
-            # git pull
+            # git pull origin test-branch
             MagicMock(exit_code=0, output=b"Already up to date"),
             # claude command
-            MagicMock(exit_code=0, output=[b"Continuing task"]),
+            MagicMock(exit_code=0, output=iter([b"Continuing task"])),
             # git status --porcelain
             MagicMock(exit_code=0, output=b"M src/index.js"),
             # claude commit
-            MagicMock(exit_code=0, output=[b"Committing changes"]),
+            MagicMock(exit_code=0, output=iter([b"Committing changes"])),
             # git log -1 --pretty=%B
             MagicMock(exit_code=0, output=b"Update components based on feedback"),
             # git rev-parse HEAD
@@ -280,7 +307,7 @@ class TestTaskCommand:
         
         # Mock ContainerRunner
         mock_runner = MagicMock()
-        mock_runner.docker_client.image_exists.return_value = True
+        mock_runner.docker_service.image_exists.return_value = True
         
         # Mock container
         mock_container = MagicMock()
@@ -290,16 +317,18 @@ class TestTaskCommand:
             MagicMock(exit_code=0, output=b"test"),
             # git fetch --all
             MagicMock(exit_code=0, output=b"Fetching origin"),
+            # git show-ref check for branch
+            MagicMock(exit_code=0, output=b"refs/heads/test-branch"),
             # git checkout branch
             MagicMock(exit_code=0, output=b"Switched to branch 'test-branch'"),
-            # git pull
+            # git pull origin test-branch
             MagicMock(exit_code=0, output=b"Already up to date"),
             # claude command
-            MagicMock(exit_code=0, output=[b"Continuing task"]),
+            MagicMock(exit_code=0, output=iter([b"Continuing task"])),
             # git status --porcelain
             MagicMock(exit_code=0, output=b"M src/index.js"),
             # claude commit
-            MagicMock(exit_code=0, output=[b"Claude responded but didn't commit"]),
+            MagicMock(exit_code=0, output=iter([b"Claude responded but didn't commit"])),
             # git log -1 --pretty=%B (fails because no new commit)
             MagicMock(exit_code=1, output=b"")
         ]
@@ -474,7 +503,7 @@ class TestTaskCommand:
         
         # Mock ContainerRunner
         mock_runner = MagicMock()
-        mock_runner.docker_client.image_exists.return_value = True
+        mock_runner.docker_service.image_exists.return_value = True
         
         # Mock container
         mock_container = MagicMock()
@@ -506,8 +535,9 @@ class TestTaskCommand:
         mock_storage.create_task.return_value = mock_task
         
         mock_runner = MagicMock()
-        mock_runner.project_dir = Path.cwd()
-        mock_runner.docker_client.image_exists.return_value = True
+        mock_runner.project_root = Path.cwd()
+        mock_runner.docker_service = MagicMock()
+        mock_runner.docker_service.image_exists.return_value = True
         
         mock_get_storage_runner.return_value = (mock_storage, mock_runner)
         

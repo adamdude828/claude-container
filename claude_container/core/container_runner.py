@@ -200,8 +200,7 @@ class ContainerRunner:
         
         # No need to mount npm global directory since Claude Code is installed in the container
         
-        # Mount project directory
-        volumes[str(self.project_root)] = {'bind': DEFAULT_WORKDIR, 'mode': 'rw'}
+        # Do not mount project directory - as per project requirements
         
         return volumes
     

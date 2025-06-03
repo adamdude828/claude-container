@@ -233,7 +233,32 @@ def create(branch, description_file, mcp):
         # Step 1: Git branch setup
         click.echo(f"\n🌿 Setting up branch '{branch}'...")
         
-        # Create new branch
+        # First, ensure we're on master and pull latest changes
+        click.echo("📥 Switching to master and pulling latest changes...")
+        
+        # Checkout master
+        master_checkout_result = container.exec_run(
+            "git checkout master",
+            workdir=DEFAULT_WORKDIR
+        )
+        
+        if master_checkout_result.exit_code != 0:
+            click.echo(f"\n❌ Error: Failed to checkout master\n{master_checkout_result.output.decode()}", err=True)
+            raise Exception("Failed to checkout master branch")
+        
+        # Pull latest changes from master
+        pull_result = container.exec_run(
+            "git pull origin master",
+            workdir=DEFAULT_WORKDIR
+        )
+        
+        if pull_result.exit_code != 0:
+            click.echo(f"\n❌ Error: Failed to pull latest changes\n{pull_result.output.decode()}", err=True)
+            raise Exception("Failed to pull latest changes from master")
+        
+        click.echo("✅ Successfully pulled latest changes from master")
+        
+        # Create new branch from updated master
         checkout_result = container.exec_run(
             f"git checkout -b {branch}",
             workdir=DEFAULT_WORKDIR

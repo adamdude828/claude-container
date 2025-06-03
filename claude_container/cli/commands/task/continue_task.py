@@ -243,23 +243,47 @@ def continue_task(task_identifier, feedback, feedback_file, mcp):
         if fetch_result.exit_code != 0:
             click.echo(f"⚠️  Warning: Failed to fetch remote changes\n{fetch_result.output.decode()}", err=True)
         
-        # Checkout branch
-        click.echo(f"🌿 Checking out branch '{task_metadata.branch_name}'...")
-        checkout_result = container.exec_run(
-            f"git checkout {task_metadata.branch_name}",
+        # Check if the branch exists locally
+        branch_check_result = container.exec_run(
+            f"git show-ref --verify --quiet refs/heads/{task_metadata.branch_name}",
             workdir=DEFAULT_WORKDIR
         )
         
-        if checkout_result.exit_code != 0:
-            click.echo(f"\n❌ Error: Failed to checkout branch\n{checkout_result.output.decode()}", err=True)
-            raise Exception("Failed to checkout branch")
-        
-        # Pull latest changes
-        click.echo("📥 Pulling latest changes...")
-        pull_result = container.exec_run("git pull", workdir=DEFAULT_WORKDIR)
-        
-        if pull_result.exit_code != 0:
-            click.echo(f"⚠️  Warning: Failed to pull latest changes\n{pull_result.output.decode()}", err=True)
+        if branch_check_result.exit_code == 0:
+            # Branch exists locally, checkout and pull
+            click.echo(f"🌿 Checking out existing branch '{task_metadata.branch_name}'...")
+            checkout_result = container.exec_run(
+                f"git checkout {task_metadata.branch_name}",
+                workdir=DEFAULT_WORKDIR
+            )
+            
+            if checkout_result.exit_code != 0:
+                click.echo(f"\n❌ Error: Failed to checkout branch\n{checkout_result.output.decode()}", err=True)
+                raise Exception("Failed to checkout branch")
+            
+            # Pull latest changes from the remote feature branch
+            click.echo(f"📥 Pulling latest changes from origin/{task_metadata.branch_name}...")
+            pull_result = container.exec_run(
+                f"git pull origin {task_metadata.branch_name}",
+                workdir=DEFAULT_WORKDIR
+            )
+            
+            if pull_result.exit_code != 0:
+                click.echo(f"⚠️  Warning: Failed to pull latest changes\n{pull_result.output.decode()}", err=True)
+                # Try to continue anyway, as the branch might not have been pushed yet
+        else:
+            # Branch doesn't exist locally, try to checkout from remote
+            click.echo(f"🌿 Checking out branch '{task_metadata.branch_name}' from remote...")
+            checkout_result = container.exec_run(
+                f"git checkout -b {task_metadata.branch_name} origin/{task_metadata.branch_name}",
+                workdir=DEFAULT_WORKDIR
+            )
+            
+            if checkout_result.exit_code != 0:
+                # Remote branch might not exist either
+                click.echo(f"\n❌ Error: Branch '{task_metadata.branch_name}' not found locally or remotely", err=True)
+                click.echo("This might happen if the branch was never pushed.", err=True)
+                raise Exception(f"Branch '{task_metadata.branch_name}' not found")
         
         # Build context for Claude
         full_context = f"""You are continuing work on a task. Here is the original task description:
