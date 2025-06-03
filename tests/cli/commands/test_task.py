@@ -228,12 +228,18 @@ class TestTaskCommand:
         assert result.exit_code == 1
         mock_auth.assert_called_once()
     
+    @patch('claude_container.cli.commands.task.continue_task.MCPManager')
     @patch('claude_container.cli.commands.task.continue_task.TaskStorageManager')
     @patch('claude_container.cli.commands.task.continue_task.ContainerRunner')
     @patch('claude_container.cli.commands.task.continue_task.check_claude_auth')
-    def test_continue_success(self, mock_auth, mock_runner_class, mock_storage_class, cli_runner, mock_task):
+    def test_continue_success(self, mock_auth, mock_runner_class, mock_storage_class, mock_mcp_manager_class, cli_runner, mock_task):
         """Test successful task continue."""
         mock_auth.return_value = True
+        
+        # Mock MCP Manager
+        mock_mcp_manager = MagicMock()
+        mock_mcp_manager.list_servers.return_value = []  # No MCP servers
+        mock_mcp_manager_class.return_value = mock_mcp_manager
         
         # Mock storage manager
         mock_storage = MagicMock()
@@ -252,8 +258,6 @@ class TestTaskCommand:
             MagicMock(exit_code=0, output=b"test"),
             # git fetch --all
             MagicMock(exit_code=0, output=b"Fetching origin"),
-            # git show-ref check for branch
-            MagicMock(exit_code=0, output=b"refs/heads/test-branch"),
             # git checkout branch
             MagicMock(exit_code=0, output=b"Switched to branch 'test-branch'"),
             # git pull origin test-branch
@@ -293,12 +297,18 @@ class TestTaskCommand:
             # Verify logs were saved
             assert mock_storage.save_task_log.call_count == 2  # claude_output and claude_commit
     
+    @patch('claude_container.cli.commands.task.continue_task.MCPManager')
     @patch('claude_container.cli.commands.task.continue_task.TaskStorageManager')
     @patch('claude_container.cli.commands.task.continue_task.ContainerRunner')
     @patch('claude_container.cli.commands.task.continue_task.check_claude_auth')
-    def test_continue_no_commit(self, mock_auth, mock_runner_class, mock_storage_class, cli_runner, mock_task):
+    def test_continue_no_commit(self, mock_auth, mock_runner_class, mock_storage_class, mock_mcp_manager_class, cli_runner, mock_task):
         """Test task continue when Claude doesn't make a commit."""
         mock_auth.return_value = True
+        
+        # Mock MCP Manager
+        mock_mcp_manager = MagicMock()
+        mock_mcp_manager.list_servers.return_value = []  # No MCP servers
+        mock_mcp_manager_class.return_value = mock_mcp_manager
         
         # Mock storage manager
         mock_storage = MagicMock()
@@ -317,8 +327,6 @@ class TestTaskCommand:
             MagicMock(exit_code=0, output=b"test"),
             # git fetch --all
             MagicMock(exit_code=0, output=b"Fetching origin"),
-            # git show-ref check for branch
-            MagicMock(exit_code=0, output=b"refs/heads/test-branch"),
             # git checkout branch
             MagicMock(exit_code=0, output=b"Switched to branch 'test-branch'"),
             # git pull origin test-branch
