@@ -14,7 +14,7 @@ class DockerfileGenerator:
         """Initialize generator."""
         self.project_root = project_root
     
-    def generate_with_claude(self, claude_code_path: str) -> str:
+    def generate_with_claude(self) -> str:
         """Generate a Dockerfile using the template system."""
         # Load or create container configuration
         data_dir = self.project_root / ".claude-container"

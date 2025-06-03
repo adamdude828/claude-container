@@ -126,6 +126,11 @@ def customize(base_image, tag, no_commit):
     for host_path, mount_info in volumes.items():
         bind_path = mount_info['bind']
         mode = mount_info.get('mode', 'rw')
+        
+        # For customize command, mount SSH keys to root instead of node user
+        if bind_path == '/home/node/.ssh':
+            bind_path = '/root/.ssh'
+        
         docker_cmd.extend(['-v', f'{host_path}:{bind_path}:{mode}'])
     
     # Add image

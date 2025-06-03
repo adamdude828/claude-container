@@ -4,7 +4,6 @@ import click
 import subprocess
 
 from claude_container.cli.helpers import get_project_context, get_docker_client
-from ...utils.path_finder import PathFinder
 from ...utils.config_manager import ConfigManager
 from ...models.container import ContainerConfig
 from ...core.constants import CONTAINER_PREFIX
@@ -14,9 +13,8 @@ from ...core.constants import CONTAINER_PREFIX
 @click.option('--force-rebuild', is_flag=True, help='Force rebuild of container image even if it exists')
 @click.option('--no-cache', is_flag=True, help='Build without using Docker cache (rebuilds all layers)')
 @click.option('--tag', help='Tag for the container image')
-@click.option('--claude-code-path', envvar='CLAUDE_CODE_PATH', help='Path to Claude Code executable')
 @click.option('--minimal', is_flag=True, help='Build minimal container without project code')
-def build(force_rebuild, no_cache, tag, claude_code_path, minimal):
+def build(force_rebuild, no_cache, tag, minimal):
     """Build Docker container for the project.
     
     By default, builds a container with your project code included.
@@ -59,13 +57,6 @@ def build(force_rebuild, no_cache, tag, claude_code_path, minimal):
         click.echo('  git config --global user.name "Your Name"', err=True)
         return
     
-    # Find Claude Code executable
-    if not claude_code_path:
-        path_finder = PathFinder()
-        claude_code_path = path_finder.find_claude_code()
-        if not claude_code_path:
-            click.echo("Claude Code executable not found. Please specify --claude-code-path")
-            return
     
     # Load or create container configuration
     config_manager = ConfigManager(data_dir)

@@ -27,7 +27,7 @@ class TestDockerfileGenerator:
         
         # Test
         generator = DockerfileGenerator(temp_project_dir)
-        result = generator.generate_with_claude("/path/to/claude")
+        result = generator.generate_with_claude()
         
         # Verify
         assert "FROM python:3.10" in result
@@ -67,7 +67,7 @@ class TestDockerfileGenerator:
         
         # Test
         generator = DockerfileGenerator(temp_project_dir)
-        result = generator.generate_with_claude("/path/to/claude")
+        result = generator.generate_with_claude()
         
         # Verify
         assert "FROM ubuntu:22.04" in result

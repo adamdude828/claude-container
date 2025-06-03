@@ -22,7 +22,7 @@ class ImageBuilder:
         self.config_manager = ConfigManager(data_dir)
         self.image_name = f"{CONTAINER_PREFIX}-{project_root.name}".lower()
     
-    def build(self, claude_code_path: str, force_rebuild: bool = False) -> str:
+    def build(self, force_rebuild: bool = False) -> str:
         """Build Docker image using Claude Code."""
         # Check if rebuild is needed
         if not force_rebuild and self.docker_service.image_exists(self.image_name):
@@ -44,9 +44,7 @@ class ImageBuilder:
             permissions_manager.setup_docker_permissions()
             
             # Generate Dockerfile with Claude
-            dockerfile_content = self.dockerfile_generator.generate_with_claude(
-                claude_code_path
-            )
+            dockerfile_content = self.dockerfile_generator.generate_with_claude()
             
             # Write Dockerfile
             temp_dockerfile.write_text(dockerfile_content)
