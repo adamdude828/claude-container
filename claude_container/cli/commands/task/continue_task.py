@@ -1,14 +1,19 @@
 """Continue task command."""
 
+import json
 import click
 import sys
 from pathlib import Path
 from datetime import datetime
 
+import questionary
+from rich.console import Console
+
 from ....core.container_runner import ContainerRunner
-from ....core.constants import CONTAINER_PREFIX, DATA_DIR_NAME, DEFAULT_WORKDIR, LIBERAL_SETTINGS_JSON
+from ....core.constants import CONTAINER_PREFIX, DATA_DIR_NAME, DEFAULT_WORKDIR, MCP_CONFIG_PATH, CLAUDE_SKIP_PERMISSIONS_FLAG, CLAUDE_PERMISSIONS_ERROR
 from ....core.task_storage import TaskStorageManager
 from ....models.task import TaskStatus
+from ....utils import MCPManager
 from ...commands.auth_check import check_claude_auth
 from ...util import get_feedback_from_editor
 
@@ -17,7 +22,8 @@ from ...util import get_feedback_from_editor
 @click.argument('task_identifier')
 @click.option('--feedback', '-f', help='Inline feedback string')
 @click.option('--feedback-file', type=click.Path(exists=True), help='File containing feedback')
-def continue_task(task_identifier, feedback, feedback_file):
+@click.option('--mcp', help='Comma-separated list of MCP servers to use (overrides previous selection)')
+def continue_task(task_identifier, feedback, feedback_file, mcp):
     """Continue an existing task with additional feedback"""
     # Verify Claude authentication
     if not check_claude_auth():
@@ -110,10 +116,122 @@ def continue_task(task_identifier, feedback, feedback_file):
         container = container_runner.create_persistent_container("task")
         storage_manager.update_task(task_metadata.id, container_id=container.id)
         
-        # Configure Claude settings
-        container.exec_run(f"mkdir -p {DEFAULT_WORKDIR}/.claude")
-        write_cmd = f"echo '{LIBERAL_SETTINGS_JSON}' > {DEFAULT_WORKDIR}/.claude/settings.local.json"
-        container.exec_run(["sh", "-c", write_cmd])
+        # Check if permissions are accepted
+        click.echo("🔍 Checking Claude permissions...")
+        test_result = container.exec_run(
+            ["claude", "-p", "echo test", CLAUDE_SKIP_PERMISSIONS_FLAG],
+            workdir=DEFAULT_WORKDIR
+        )
+        
+        if test_result.exit_code != 0 and CLAUDE_PERMISSIONS_ERROR in test_result.output.decode():
+            click.echo("❌ Claude permissions have not been accepted yet.", err=True)
+            click.echo("Please run 'claude-container accept-permissions' first.", err=True)
+            
+            # Cleanup container
+            container.stop()
+            container.remove()
+            raise click.Abort()
+        
+        # Handle MCP server selection
+        console = Console()
+        mcp_manager = MCPManager(project_root)
+        selected_servers = []
+        
+        try:
+            all_servers = mcp_manager.list_servers()
+            
+            if mcp:
+                # Use provided server list (overrides previous selection)
+                requested = [s.strip() for s in mcp.split(',')]
+                missing = mcp_manager.validate_server_names(requested)
+                
+                if missing:
+                    console.print(f"[red]Error: Unknown MCP servers: {', '.join(missing)}[/red]")
+                    console.print(f"Available servers: {', '.join(all_servers)}")
+                    sys.exit(1)
+                
+                selected_servers = requested
+                console.print(f"[green]Using MCP servers: {', '.join(selected_servers)}[/green]")
+                
+                # Update task metadata with new selection
+                storage_manager.update_task(task_metadata.id, mcp_servers=selected_servers)
+            
+            elif task_metadata.mcp_servers:
+                # Use servers from previous task run
+                selected_servers = task_metadata.mcp_servers
+                console.print(f"[green]Using MCP servers from previous run: {', '.join(selected_servers)}[/green]")
+            
+            elif all_servers and sys.stdin.isatty():
+                # Interactive mode - show prompt
+                console.print("\n[cyan]Select MCP servers to use for this task:[/cyan]")
+                console.print("[dim]Previous selection: None[/dim]")
+                
+                # Add "All servers" option at the top
+                choices = ["All servers"] + all_servers
+                selected = questionary.checkbox(
+                    "Available servers:",
+                    choices=choices
+                ).ask()
+                
+                if selected is None:
+                    console.print("[yellow]No servers selected, continuing without MCP[/yellow]")
+                elif "All servers" in selected:
+                    selected_servers = all_servers
+                    console.print(f"[green]Using all MCP servers: {', '.join(selected_servers)}[/green]")
+                else:
+                    selected_servers = selected
+                    console.print(f"[green]Using MCP servers: {', '.join(selected_servers)}[/green]")
+                
+                # Update task metadata with new selection
+                if selected_servers:
+                    storage_manager.update_task(task_metadata.id, mcp_servers=selected_servers)
+            
+            else:
+                # Non-interactive mode - use all available if no previous selection
+                selected_servers = all_servers
+                if selected_servers:
+                    console.print(f"[green]Using all available MCP servers: {', '.join(selected_servers)}[/green]")
+                    storage_manager.update_task(task_metadata.id, mcp_servers=selected_servers)
+        
+        except Exception as e:
+            console.print(f"[yellow]Warning: Failed to load MCP servers: {e}[/yellow]")
+            # Continue without MCP servers
+        
+        # Write MCP configuration if servers are selected
+        mcp_path = None
+        if selected_servers:
+            click.echo("🔧 Configuring MCP servers...")
+            try:
+                # Get filtered registry with only selected servers
+                filtered_registry = mcp_manager.filter_registry(selected_servers)
+                mcp_config = filtered_registry.to_mcp_json()
+                mcp_config_str = json.dumps(mcp_config, indent=2)
+                
+                # Debug: Show MCP configuration
+                click.echo("\n📋 MCP Configuration:")
+                click.echo("-" * 60)
+                click.echo(mcp_config_str)
+                click.echo("-" * 60)
+                
+                # Write MCP configuration to container (outside workspace to avoid commits)
+                mcp_path = f"/tmp/{MCP_CONFIG_PATH}"
+                click.echo(f"\n📝 Writing MCP config to: {mcp_path}")
+                container_runner.write_file(container, mcp_path, mcp_config_str)
+                
+                # Verify file was written
+                verify_result = container.exec_run(
+                    f"cat {mcp_path}",
+                    workdir=DEFAULT_WORKDIR
+                )
+                if verify_result.exit_code == 0:
+                    click.echo("✅ MCP config file verified in container")
+                else:
+                    click.echo(f"❌ Failed to verify MCP config file: {verify_result.output.decode()}")
+                
+                click.echo(f"✅ Configured {len(selected_servers)} MCP server(s)")
+            except Exception as e:
+                click.echo(f"⚠️  Warning: Failed to configure MCP servers: {e}", err=True)
+                mcp_path = None
         
         # Fetch latest remote changes first
         click.echo("📥 Fetching latest remote changes...")
@@ -162,9 +280,20 @@ Please continue working on this task based on the feedback provided."""
         click.echo("Claude is working on your task...")
         click.echo("-" * 60 + "\n")
         
+        # Build Claude command with optional MCP config
+        claude_cmd = ["claude", "--model=opus", "-p", full_context, CLAUDE_SKIP_PERMISSIONS_FLAG]
+        if mcp_path:
+            claude_cmd.extend(["--mcp-config", mcp_path])
+        
+        # Debug: Show the full command
+        click.echo("\n🔍 Claude command:")
+        click.echo(f"   {' '.join(claude_cmd[:6])}... [truncated]")
+        if mcp_path:
+            click.echo(f"   MCP config: {mcp_path}")
+        
         claude_output = []
         claude_result = container.exec_run(
-            ["claude", "--model=sonnet", "-p", full_context],
+            claude_cmd,
             workdir=DEFAULT_WORKDIR,
             stream=True
         )
@@ -197,9 +326,14 @@ Please continue working on this task based on the feedback provided."""
             click.echo("\n🤖 Asking Claude to commit the changes...")
             click.echo("-" * 60 + "\n")
             
+            # Build Claude command with optional MCP config
+            commit_cmd = ["claude", "--model=opus", "-p", commit_prompt, CLAUDE_SKIP_PERMISSIONS_FLAG]
+            if mcp_path:
+                commit_cmd.extend(["--mcp-config", mcp_path])
+            
             commit_output = []
             commit_result = container.exec_run(
-                ["claude", "--model=sonnet", "-p", commit_prompt],
+                commit_cmd,
                 workdir=DEFAULT_WORKDIR,
                 stream=True
             )

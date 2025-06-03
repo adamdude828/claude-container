@@ -372,3 +372,84 @@ class TestContainerRunner:
         
         with pytest.raises(RuntimeError, match="Failed to create container"):
             runner.create_persistent_container("task")
+    
+    @patch('claude_container.core.container_runner.DockerService')
+    def test_write_file_success(self, mock_docker_service_class, temp_project_dir):
+        """Test successfully writing a file to container."""
+        mock_docker = MagicMock()
+        mock_result = {'ExitCode': 0, 'stderr': b''}
+        mock_docker.exec_in_container.return_value = mock_result
+        mock_docker_service_class.return_value = mock_docker
+        
+        mock_container = MagicMock()
+        
+        data_dir = temp_project_dir / ".claude-container"
+        runner = ContainerRunner(temp_project_dir, data_dir, "test-image")
+        
+        # Test simple content
+        runner.write_file(mock_container, "/test/file.txt", "Hello World")
+        
+        # Verify exec was called
+        mock_docker.exec_in_container.assert_called_once_with(
+            mock_container,
+            "sh -c 'cat > /test/file.txt << '''EOF'''\nHello World\nEOF'",
+            stream=False,
+            tty=False
+        )
+    
+    @patch('claude_container.core.container_runner.DockerService')
+    def test_write_file_with_quotes(self, mock_docker_service_class, temp_project_dir):
+        """Test writing file content with quotes."""
+        mock_docker = MagicMock()
+        mock_result = {'ExitCode': 0, 'stderr': b''}
+        mock_docker.exec_in_container.return_value = mock_result
+        mock_docker_service_class.return_value = mock_docker
+        
+        mock_container = MagicMock()
+        
+        data_dir = temp_project_dir / ".claude-container"
+        runner = ContainerRunner(temp_project_dir, data_dir, "test-image")
+        
+        # Test content with quotes
+        content = "This has 'single quotes' in it"
+        runner.write_file(mock_container, "/test/file.txt", content)
+        
+        # Verify quotes were escaped properly
+        expected_content = "This has '\"'\"'single quotes'\"'\"' in it"
+        mock_docker.exec_in_container.assert_called_once_with(
+            mock_container,
+            f"sh -c 'cat > /test/file.txt << '''EOF'''\n{expected_content}\nEOF'",
+            stream=False,
+            tty=False
+        )
+    
+    @patch('claude_container.core.container_runner.DockerService')
+    def test_write_file_failure(self, mock_docker_service_class, temp_project_dir):
+        """Test handling write file failure."""
+        mock_docker = MagicMock()
+        mock_result = {'ExitCode': 1, 'stderr': b'Permission denied'}
+        mock_docker.exec_in_container.return_value = mock_result
+        mock_docker_service_class.return_value = mock_docker
+        
+        mock_container = MagicMock()
+        
+        data_dir = temp_project_dir / ".claude-container"
+        runner = ContainerRunner(temp_project_dir, data_dir, "test-image")
+        
+        with pytest.raises(RuntimeError, match="Failed to write file: Permission denied"):
+            runner.write_file(mock_container, "/test/file.txt", "Hello")
+    
+    @patch('claude_container.core.container_runner.DockerService')
+    def test_write_file_exception(self, mock_docker_service_class, temp_project_dir):
+        """Test handling exception during file write."""
+        mock_docker = MagicMock()
+        mock_docker.exec_in_container.side_effect = Exception("Docker error")
+        mock_docker_service_class.return_value = mock_docker
+        
+        mock_container = MagicMock()
+        
+        data_dir = temp_project_dir / ".claude-container"
+        runner = ContainerRunner(temp_project_dir, data_dir, "test-image")
+        
+        with pytest.raises(RuntimeError, match="Failed to write file /test/file.txt: Docker error"):
+            runner.write_file(mock_container, "/test/file.txt", "Hello")
