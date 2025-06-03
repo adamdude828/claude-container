@@ -99,6 +99,7 @@ def customize(base_image, tag, no_commit):
     click.echo("  - Install packages (apt-get, npm, pip, etc.)")
     click.echo("  - Configure the environment")
     click.echo("  - Set up tools and dependencies")
+    click.echo("  - Use SSH keys (automatically copied to /root/.ssh)")
     click.echo("\nWhen done, type 'exit' to save your changes.")
     if no_commit:
         click.echo("\n⚠️  --no-commit specified: Changes will NOT be saved!")
@@ -123,19 +124,29 @@ def customize(base_image, tag, no_commit):
         docker_cmd.extend(['-e', f'{key}={value}'])
     
     # Add volume mounts
+    ssh_mounted = False
     for host_path, mount_info in volumes.items():
         bind_path = mount_info['bind']
         mode = mount_info.get('mode', 'rw')
         
-        # For customize command, mount SSH keys to root instead of node user
+        # For customize command, handle SSH keys specially
         if bind_path == '/home/node/.ssh':
-            bind_path = '/root/.ssh'
-        
-        docker_cmd.extend(['-v', f'{host_path}:{bind_path}:{mode}'])
+            # Mount SSH to a temp location instead
+            docker_cmd.extend(['-v', f'{host_path}:/tmp/.ssh-host:ro'])
+            ssh_mounted = True
+        else:
+            docker_cmd.extend(['-v', f'{host_path}:{bind_path}:{mode}'])
     
     # Add image
     docker_cmd.append(base_image)
-    docker_cmd.append('/bin/bash')
+    
+    # If SSH was mounted, create a command that copies SSH keys with proper permissions
+    if ssh_mounted:
+        # Use bash -c to run multiple commands
+        docker_cmd.extend(['/bin/bash', '-c', 
+            'cp -r /tmp/.ssh-host /root/.ssh && chmod 700 /root/.ssh && chmod 600 /root/.ssh/* 2>/dev/null; exec /bin/bash'])
+    else:
+        docker_cmd.append('/bin/bash')
     
     # Run interactive container
     click.echo("\n🚀 Starting container...\n")
