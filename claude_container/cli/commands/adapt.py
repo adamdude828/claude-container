@@ -8,9 +8,10 @@ import yaml
 from typing import Optional, Dict, Any
 from pathlib import Path
 
+from claude_container.cli.helpers import get_project_context, get_docker_client
 from claude_container.utils.config_manager import ConfigManager
-from claude_container.core.docker_client import DockerClient
 from claude_container.core.container_runner import ContainerRunner
+from claude_container.core.constants import CONTAINER_PREFIX
 
 
 @click.command()
@@ -47,9 +48,13 @@ def adapt(image: Optional[str], compose_file: Optional[str], service: Optional[s
         claude-container adapt --image ubuntu:22.04
         claude-container adapt --compose-file docker-compose.yml --service web
     """
-    config_manager = ConfigManager()
-    docker_client = DockerClient()
-    container_runner = ContainerRunner(config_manager, docker_client)
+    # Get project context
+    project_root, data_dir = get_project_context()
+    data_dir.mkdir(exist_ok=True)
+    
+    # Initialize services
+    config_manager = ConfigManager(data_dir)
+    docker_client = get_docker_client()
     
     # Validate inputs
     if not image and not compose_file:
