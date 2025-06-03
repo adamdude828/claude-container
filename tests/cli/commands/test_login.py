@@ -29,7 +29,7 @@ class TestLoginCommand:
         """Test login when image doesn't exist."""
         # Mock ContainerRunner
         mock_runner = MagicMock()
-        mock_runner.docker_client.image_exists.return_value = False
+        mock_runner.docker_service.image_exists.return_value = False
         mock_runner_class.return_value = mock_runner
         
         with cli_runner.isolated_filesystem():
@@ -45,7 +45,7 @@ class TestLoginCommand:
         """Test successful login."""
         # Mock ContainerRunner
         mock_runner = MagicMock()
-        mock_runner.docker_client.image_exists.return_value = True
+        mock_runner.docker_service.image_exists.return_value = True
         mock_runner.run_command = MagicMock()  # Mock the run_command method
         mock_runner_class.return_value = mock_runner
         

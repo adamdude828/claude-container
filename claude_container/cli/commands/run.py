@@ -21,7 +21,7 @@ def run(command):
     
     try:
         # Initialize Docker client (checks connection)
-        docker_client = DockerClient()
+        DockerClient()
     except RuntimeError as e:
         click.echo(f"Error: {e}", err=True)
         return

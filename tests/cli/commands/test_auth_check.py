@@ -29,7 +29,7 @@ class TestAuthCheckCommand:
         """Test auth_check when image doesn't exist."""
         # Mock ContainerRunner
         mock_runner = MagicMock()
-        mock_runner.docker_client.image_exists.return_value = False
+        mock_runner.docker_service.image_exists.return_value = False
         mock_runner_class.return_value = mock_runner
         
         with cli_runner.isolated_filesystem():
@@ -45,12 +45,12 @@ class TestAuthCheckCommand:
         """Test auth_check when authenticated."""
         # Mock ContainerRunner
         mock_runner = MagicMock()
-        mock_runner.docker_client.image_exists.return_value = True
+        mock_runner.docker_service.image_exists.return_value = True
         
         # Mock container execution for auth check
         mock_container = MagicMock()
         mock_container.wait.return_value = {'StatusCode': 0}
-        mock_runner.docker_client.client.containers.run.return_value = mock_container
+        mock_runner.docker_service.run_container.return_value = mock_container
         mock_runner._get_container_config.return_value = {
             'image': 'test-image',
             'volumes': {},
@@ -74,12 +74,12 @@ class TestAuthCheckCommand:
         """Test auth_check when not authenticated."""
         # Mock ContainerRunner
         mock_runner = MagicMock()
-        mock_runner.docker_client.image_exists.return_value = True
+        mock_runner.docker_service.image_exists.return_value = True
         
         # Mock container execution to simulate auth failure
         mock_container = MagicMock()
         mock_container.wait.return_value = {'StatusCode': 1}
-        mock_runner.docker_client.client.containers.run.return_value = mock_container
+        mock_runner.docker_service.run_container.return_value = mock_container
         mock_runner._get_container_config.return_value = {
             'image': 'test-image',
             'volumes': {},
@@ -107,22 +107,21 @@ class TestAuthCheckCommand:
         assert "Check if Claude authentication is still valid" in result.output
     
     @patch('claude_container.cli.commands.auth_check.ContainerRunner')
-    @patch('claude_container.cli.commands.auth_check.Path')
-    def test_check_claude_auth_function_success(self, mock_path, mock_runner_class):
+    @patch('claude_container.cli.commands.auth_check.get_project_context')
+    def test_check_claude_auth_function_success(self, mock_get_context, mock_runner_class):
         """Test check_claude_auth function returns True when authenticated."""
-        # Mock Path to have data dir exist
-        mock_cwd = MagicMock()
-        mock_path.cwd.return_value = mock_cwd
+        # Mock get_project_context to return existing data dir
+        mock_project_root = MagicMock()
         mock_data_dir = MagicMock()
         mock_data_dir.exists.return_value = True
-        mock_cwd.__truediv__.return_value = mock_data_dir
+        mock_get_context.return_value = (mock_project_root, mock_data_dir)
         
         # Mock ContainerRunner
         mock_runner = MagicMock()
-        mock_runner.docker_client.image_exists.return_value = True
+        mock_runner.docker_service.image_exists.return_value = True
         mock_container = MagicMock()
         mock_container.wait.return_value = {'StatusCode': 0}
-        mock_runner.docker_client.client.containers.run.return_value = mock_container
+        mock_runner.docker_service.run_container.return_value = mock_container
         mock_runner._get_container_config.return_value = {'test': 'config'}
         mock_runner_class.return_value = mock_runner
         
@@ -132,22 +131,21 @@ class TestAuthCheckCommand:
         mock_container.remove.assert_called_once()
     
     @patch('claude_container.cli.commands.auth_check.ContainerRunner')
-    @patch('claude_container.cli.commands.auth_check.Path')
-    def test_check_claude_auth_function_failure(self, mock_path, mock_runner_class):
+    @patch('claude_container.cli.commands.auth_check.get_project_context')
+    def test_check_claude_auth_function_failure(self, mock_get_context, mock_runner_class):
         """Test check_claude_auth function returns False when not authenticated."""
-        # Mock Path to have data dir exist
-        mock_cwd = MagicMock()
-        mock_path.cwd.return_value = mock_cwd
+        # Mock get_project_context to return existing data dir
+        mock_project_root = MagicMock()
         mock_data_dir = MagicMock()
         mock_data_dir.exists.return_value = True
-        mock_cwd.__truediv__.return_value = mock_data_dir
+        mock_get_context.return_value = (mock_project_root, mock_data_dir)
         
         # Mock ContainerRunner
         mock_runner = MagicMock()
-        mock_runner.docker_client.image_exists.return_value = True
+        mock_runner.docker_service.image_exists.return_value = True
         mock_container = MagicMock()
         mock_container.wait.return_value = {'StatusCode': 1}
-        mock_runner.docker_client.client.containers.run.return_value = mock_container
+        mock_runner.docker_service.run_container.return_value = mock_container
         mock_runner._get_container_config.return_value = {'test': 'config'}
         mock_runner_class.return_value = mock_runner
         

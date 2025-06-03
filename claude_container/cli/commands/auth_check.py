@@ -1,8 +1,8 @@
 import click
 import sys
-from pathlib import Path
+from claude_container.cli.helpers import get_project_context
 from claude_container.core.container_runner import ContainerRunner
-from claude_container.core.constants import CONTAINER_PREFIX, DATA_DIR_NAME
+from claude_container.core.constants import CONTAINER_PREFIX
 
 
 def check_claude_auth(quiet=False):
@@ -14,8 +14,7 @@ def check_claude_auth(quiet=False):
     Returns:
         bool: True if authentication is valid, False otherwise
     """
-    project_root = Path.cwd()
-    data_dir = project_root / DATA_DIR_NAME
+    project_root, data_dir = get_project_context()
     
     if not data_dir.exists():
         if not quiet:
@@ -33,7 +32,7 @@ def check_claude_auth(quiet=False):
         return False
     
     # Check if image exists
-    if not runner.docker_client.image_exists(image_name):
+    if not runner.docker_service.image_exists(image_name):
         if not quiet:
             click.echo(f"Container image '{image_name}' not found.", err=True)
             click.echo("Please run 'claude-container build' first.")
@@ -56,7 +55,7 @@ def check_claude_auth(quiet=False):
         config['labels'] = {"claude-container": "true", "claude-container-type": "auth-check"}
         
         # Run container
-        container = runner.docker_client.client.containers.run(**config)
+        container = runner.docker_service.run_container(**config)
         
         # Wait for container to complete and get exit code
         result = container.wait()

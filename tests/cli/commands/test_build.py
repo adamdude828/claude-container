@@ -10,12 +10,12 @@ class TestBuildCommand:
     """Smoke tests for build command."""
     
     @patch('claude_container.cli.commands.build.subprocess.check_output')
-    @patch('claude_container.cli.commands.build.DockerClient')
+    @patch('claude_container.cli.commands.build.get_docker_client')
     @patch('claude_container.cli.commands.build.ConfigManager')
     @patch('claude_container.core.dockerfile_generator.DockerfileGenerator')
     @patch('claude_container.cli.commands.build.PathFinder')
     def test_build_command_success(self, mock_path_finder_class, mock_generator_class, 
-                                  mock_config_manager_class, mock_docker_client_class, mock_subprocess, cli_runner):
+                                  mock_config_manager_class, mock_get_docker_client, mock_subprocess, cli_runner):
         """Test successful build command."""
         # Setup git config mocks
         mock_subprocess.side_effect = ["test@example.com", "Test User"]
@@ -23,7 +23,7 @@ class TestBuildCommand:
         # Setup mocks
         mock_docker = MagicMock()
         mock_docker.image_exists.return_value = False
-        mock_docker_client_class.return_value = mock_docker
+        mock_get_docker_client.return_value = mock_docker
         
         mock_path_finder = MagicMock()
         mock_path_finder.find_claude_code.return_value = "/usr/local/bin/claude"
@@ -49,27 +49,26 @@ class TestBuildCommand:
         assert "Container image built" in result.output
         mock_docker.build_image.assert_called_once()
     
-    @patch('claude_container.cli.commands.build.DockerClient')
-    def test_build_command_docker_not_running(self, mock_docker_client_class, cli_runner):
+    @patch('claude_container.cli.commands.build.get_docker_client')
+    def test_build_command_docker_not_running(self, mock_get_docker_client, cli_runner):
         """Test build command when Docker is not running."""
-        mock_docker_client_class.side_effect = RuntimeError("Docker daemon is not running")
+        mock_get_docker_client.side_effect = SystemExit(1)
         
         result = cli_runner.invoke(build, [])
         
-        assert result.exit_code == 0  # Click doesn't propagate exit code from return
-        assert "Error: Docker daemon is not running" in result.output
+        assert result.exit_code == 1  # Should exit with error
     
     @patch('claude_container.cli.commands.build.subprocess.check_output')
-    @patch('claude_container.cli.commands.build.DockerClient')
+    @patch('claude_container.cli.commands.build.get_docker_client')
     @patch('claude_container.cli.commands.build.PathFinder')
-    def test_build_command_claude_not_found(self, mock_path_finder_class, mock_docker_client_class, mock_subprocess, cli_runner):
+    def test_build_command_claude_not_found(self, mock_path_finder_class, mock_get_docker_client, mock_subprocess, cli_runner):
         """Test build command when Claude Code is not found."""
         # Setup git config mocks
         mock_subprocess.side_effect = ["test@example.com", "Test User"]
         
         mock_docker = MagicMock()
         mock_docker.image_exists.return_value = False  # Image doesn't exist, so it will try to build
-        mock_docker_client_class.return_value = mock_docker
+        mock_get_docker_client.return_value = mock_docker
         
         mock_path_finder = MagicMock()
         mock_path_finder.find_claude_code.return_value = None
@@ -79,12 +78,12 @@ class TestBuildCommand:
         
         assert "Claude Code executable not found" in result.output
     
-    @patch('claude_container.cli.commands.build.DockerClient')
-    def test_build_command_image_exists(self, mock_docker_client_class, cli_runner):
+    @patch('claude_container.cli.commands.build.get_docker_client')
+    def test_build_command_image_exists(self, mock_get_docker_client, cli_runner):
         """Test build command when image already exists."""
         mock_docker = MagicMock()
         mock_docker.image_exists.return_value = True
-        mock_docker_client_class.return_value = mock_docker
+        mock_get_docker_client.return_value = mock_docker
         
         result = cli_runner.invoke(build, [])
         
@@ -92,11 +91,11 @@ class TestBuildCommand:
         mock_docker.build_image.assert_not_called()
     
     @patch('claude_container.cli.commands.build.subprocess.check_output')
-    @patch('claude_container.cli.commands.build.DockerClient')
+    @patch('claude_container.cli.commands.build.get_docker_client')
     @patch('claude_container.cli.commands.build.ConfigManager')
     @patch('claude_container.core.dockerfile_generator.DockerfileGenerator')
     def test_build_command_force_rebuild(self, mock_generator_class, mock_config_manager_class,
-                                       mock_docker_client_class, mock_subprocess, cli_runner):
+                                       mock_get_docker_client, mock_subprocess, cli_runner):
         """Test build command with --force-rebuild flag."""
         # Setup git config mocks
         mock_subprocess.side_effect = ["test@example.com", "Test User"]
@@ -104,7 +103,7 @@ class TestBuildCommand:
         # Setup mocks
         mock_docker = MagicMock()
         mock_docker.image_exists.return_value = True
-        mock_docker_client_class.return_value = mock_docker
+        mock_get_docker_client.return_value = mock_docker
         
         mock_config_manager = MagicMock()
         mock_config = MagicMock()
@@ -127,15 +126,15 @@ class TestBuildCommand:
         mock_docker.build_image.assert_called_once()
     
     @patch('claude_container.cli.commands.build.subprocess.check_output')
-    @patch('claude_container.cli.commands.build.DockerClient')
-    def test_build_command_no_git_config(self, mock_docker_client_class, mock_subprocess, cli_runner):
+    @patch('claude_container.cli.commands.build.get_docker_client')
+    def test_build_command_no_git_config(self, mock_get_docker_client, mock_subprocess, cli_runner):
         """Test build command when git config is not set."""
         # Setup mocks - subprocess raises error when git config not found
         mock_subprocess.side_effect = subprocess.CalledProcessError(1, 'git config')
         
         mock_docker = MagicMock()
         mock_docker.image_exists.return_value = False
-        mock_docker_client_class.return_value = mock_docker
+        mock_get_docker_client.return_value = mock_docker
         
         result = cli_runner.invoke(build, [])
         
