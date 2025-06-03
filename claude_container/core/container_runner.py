@@ -36,7 +36,8 @@ class ContainerRunner:
     def _get_container_config(self, command=None, tty=True, stdin_open=True, 
                               detach=False, remove=True, stdout=False, stderr=False,
                               auto_approve: bool = False,
-                              name: Optional[str] = None) -> Dict:
+                              name: Optional[str] = None,
+                              user: Optional[str] = None) -> Dict:
         """Get unified container configuration."""
         config = {
             'image': self.image_name,
@@ -61,9 +62,12 @@ class ContainerRunner:
         if name:
             config['name'] = name
             
+        if user:
+            config['user'] = user
+            
         return config
     
-    def run_command(self, command: List[str]):
+    def run_command(self, command: List[str], user: Optional[str] = None):
         """Run a command in the container."""
         # Check if Docker image exists
         if not self.docker_service.image_exists(self.image_name):
@@ -96,7 +100,7 @@ class ContainerRunner:
             
             if needs_interactive:
                 # For interactive commands, use subprocess for proper TTY handling
-                self._run_interactive_container(cmd)
+                self._run_interactive_container(cmd, user=user)
             elif is_claude_cmd:
                 # For non-interactive claude commands, capture output to show on error
                 config = self._get_container_config(
@@ -104,7 +108,8 @@ class ContainerRunner:
                     tty=True,
                     stdin_open=False,
                     detach=True,
-                    remove=False  # We'll remove it manually after getting logs
+                    remove=False,  # We'll remove it manually after getting logs
+                    user=user
                 )
                 container = self.docker_service.run_container(
                     **config
@@ -155,7 +160,8 @@ class ContainerRunner:
                     detach=False,
                     remove=True,
                     stdout=True,
-                    stderr=True
+                    stderr=True,
+                    user=user
                 )
                 result = self.docker_service.run_container(
                     **config
@@ -205,7 +211,7 @@ class ContainerRunner:
         return volumes
     
     
-    def _run_interactive_container(self, cmd):
+    def _run_interactive_container(self, cmd, user: Optional[str] = None):
         """Run an interactive container using subprocess for proper TTY handling."""
         # Build docker run command
         docker_cmd = [
@@ -226,6 +232,10 @@ class ContainerRunner:
             bind_path = mount_info['bind']
             mode = mount_info.get('mode', 'rw')
             docker_cmd.extend(['-v', f'{host_path}:{bind_path}:{mode}'])
+        
+        # Add user if specified
+        if user:
+            docker_cmd.extend(['--user', user])
         
         # Add image and command
         docker_cmd.append(self.image_name)
@@ -321,3 +331,26 @@ class ContainerRunner:
                 
         except Exception as e:
             raise RuntimeError(f"Failed to write file {file_path}: {e}")
+    
+    def exec_in_container_as_user(self, container, command, user: str = "node", **kwargs):
+        """Execute command in container as specified user.
+        
+        Args:
+            container: Docker container object
+            command: Command to execute (string or list)
+            user: User to run command as (default: "node")
+            **kwargs: Additional arguments passed to exec_run
+            
+        Returns:
+            Result from container.exec_run
+        """
+        # If command is a string, keep it as a string for proper shell execution
+        if isinstance(command, str):
+            # Use su to switch to the specified user with the command as a single string
+            command_with_user = ['su', '-', user, '-c', command]
+        else:
+            # If command is a list, join it properly for shell execution
+            shell_command = ' '.join(command)
+            command_with_user = ['su', '-', user, '-c', shell_command]
+        
+        return container.exec_run(command_with_user, **kwargs)

@@ -230,7 +230,7 @@ class TestContainerRunner:
         
         with patch.object(runner, '_run_interactive_container') as mock_interactive:
             runner.run_command([])
-            mock_interactive.assert_called_once_with(['/bin/bash'])
+            mock_interactive.assert_called_once_with(['/bin/bash'], user=None)
     
     @patch('claude_container.core.container_runner.DockerService')
     def test_run_command_claude_interactive(self, mock_docker_service_class, temp_project_dir):
@@ -244,7 +244,7 @@ class TestContainerRunner:
         
         with patch.object(runner, '_run_interactive_container') as mock_interactive:
             runner.run_command(['claude'])
-            mock_interactive.assert_called_once_with(['claude'])
+            mock_interactive.assert_called_once_with(['claude'], user=None)
     
     @patch('claude_container.core.container_runner.DockerService')
     def test_run_command_claude_non_interactive_success(self, mock_docker_service_class, temp_project_dir, capsys):

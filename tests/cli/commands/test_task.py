@@ -101,9 +101,13 @@ class TestTaskCommand:
         # Mock container
         mock_container = MagicMock()
         mock_container.id = "container-123"
-        mock_container.exec_run.side_effect = [
+        
+        # Mock exec_in_container_as_user instead of exec_run
+        mock_runner.exec_in_container_as_user.side_effect = [
             # Permission check
             create_exec_result(0, b"test"),
+            # git branch --show-current (check current branch)
+            create_exec_result(0, b"feature-branch"),
             # git checkout master
             create_exec_result(0, b"Switched to branch 'master'"),
             # git pull origin master
@@ -253,7 +257,9 @@ class TestTaskCommand:
         # Mock container
         mock_container = MagicMock()
         mock_container.id = "container-456"
-        mock_container.exec_run.side_effect = [
+        
+        # Mock exec_in_container_as_user instead of exec_run
+        mock_runner.exec_in_container_as_user.side_effect = [
             # Permission check
             MagicMock(exit_code=0, output=b"test"),
             # git fetch --all
@@ -322,7 +328,9 @@ class TestTaskCommand:
         # Mock container
         mock_container = MagicMock()
         mock_container.id = "container-456"
-        mock_container.exec_run.side_effect = [
+        
+        # Mock exec_in_container_as_user instead of exec_run
+        mock_runner.exec_in_container_as_user.side_effect = [
             # Permission check
             MagicMock(exit_code=0, output=b"test"),
             # git fetch --all
@@ -552,7 +560,8 @@ class TestTaskCommand:
         # Mock container that will fail on exec_run
         mock_container = MagicMock()
         mock_container.id = "container-123"
-        mock_container.exec_run.side_effect = Exception("Container execution failed")
+        # Mock exec_in_container_as_user to fail
+        mock_runner.exec_in_container_as_user.side_effect = Exception("Container execution failed")
         mock_runner.create_persistent_container.return_value = mock_container
         
         with cli_runner.isolated_filesystem():

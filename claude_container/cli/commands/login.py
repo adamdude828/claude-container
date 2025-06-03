@@ -38,7 +38,7 @@ def login():
     try:
         # Use the run_command method which uses unified config
         # This will mount all necessary volumes including .claude.json with rw permissions
-        runner.run_command(['/bin/bash'])
+        runner.run_command(['/bin/bash'], user='node')
             
     except Exception as e:
         click.echo(f"Error starting container: {e}", err=True)

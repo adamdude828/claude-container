@@ -48,7 +48,8 @@ def accept_permissions(force: bool):
                 tty=False,
                 stdin_open=False,
                 detach=True,
-                remove=False
+                remove=False,
+                user='node'
             )
             
             config['labels'] = {"claude-container": "true", "claude-container-type": "permission-check"}
@@ -81,7 +82,8 @@ def accept_permissions(force: bool):
     try:
         # Use the runner's interactive container method
         runner._run_interactive_container(
-            ["claude", CLAUDE_SKIP_PERMISSIONS_FLAG]
+            ["claude", CLAUDE_SKIP_PERMISSIONS_FLAG],
+            user='node'
         )
         
         click.echo("\n✅ Permissions accepted successfully!")

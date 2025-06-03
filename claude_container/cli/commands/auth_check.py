@@ -48,7 +48,8 @@ def check_claude_auth(quiet=False):
             tty=False,
             stdin_open=False,
             detach=True,
-            remove=False  # We'll remove it manually after getting exit code
+            remove=False,  # We'll remove it manually after getting exit code
+            user='node'
         )
         
         # Add labels for tracking

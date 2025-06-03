@@ -18,6 +18,16 @@ from ...commands.auth_check import check_claude_auth
 from ...util import get_feedback_from_editor
 
 
+def _get_exec_result(result):
+    """Helper to handle both test mock and real docker exec result formats."""
+    if hasattr(result, 'exit_code'):
+        # Test mock format
+        return result.exit_code, result.output
+    else:
+        # Real docker exec_run returns (exit_code, output)
+        return result
+
+
 @click.command(name='continue')
 @click.argument('task_identifier')
 @click.option('--feedback', '-f', help='Inline feedback string')
@@ -118,12 +128,15 @@ def continue_task(task_identifier, feedback, feedback_file, mcp):
         
         # Check if permissions are accepted
         click.echo("🔍 Checking Claude permissions...")
-        test_result = container.exec_run(
+        test_result = container_runner.exec_in_container_as_user(
+            container,
             ["claude", "-p", "echo test", CLAUDE_SKIP_PERMISSIONS_FLAG],
+            user='node',
             workdir=DEFAULT_WORKDIR
         )
         
-        if test_result.exit_code != 0 and CLAUDE_PERMISSIONS_ERROR in test_result.output.decode():
+        exit_code, output = _get_exec_result(test_result)
+        if exit_code != 0 and CLAUDE_PERMISSIONS_ERROR in output.decode():
             click.echo("❌ Claude permissions have not been accepted yet.", err=True)
             click.echo("Please run 'claude-container accept-permissions' first.", err=True)
             
@@ -219,14 +232,17 @@ def continue_task(task_identifier, feedback, feedback_file, mcp):
                 container_runner.write_file(container, mcp_path, mcp_config_str)
                 
                 # Verify file was written
-                verify_result = container.exec_run(
+                verify_result = container_runner.exec_in_container_as_user(
+                    container,
                     f"cat {mcp_path}",
+                    user='node',
                     workdir=DEFAULT_WORKDIR
                 )
-                if verify_result.exit_code == 0:
+                exit_code, output = _get_exec_result(verify_result)
+                if exit_code == 0:
                     click.echo("✅ MCP config file verified in container")
                 else:
-                    click.echo(f"❌ Failed to verify MCP config file: {verify_result.output.decode()}")
+                    click.echo(f"❌ Failed to verify MCP config file: {output.decode()}")
                 
                 click.echo(f"✅ Configured {len(selected_servers)} MCP server(s)")
             except Exception as e:
@@ -235,34 +251,43 @@ def continue_task(task_identifier, feedback, feedback_file, mcp):
         
         # Fetch latest remote changes first
         click.echo("📥 Fetching latest remote changes...")
-        fetch_result = container.exec_run(
+        fetch_result = container_runner.exec_in_container_as_user(
+            container,
             "git fetch --all",
+            user='node',
             workdir=DEFAULT_WORKDIR
         )
         
-        if fetch_result.exit_code != 0:
-            click.echo(f"⚠️  Warning: Failed to fetch remote changes\n{fetch_result.output.decode()}", err=True)
+        exit_code, output = _get_exec_result(fetch_result)
+        if exit_code != 0:
+            click.echo(f"⚠️  Warning: Failed to fetch remote changes\n{output.decode()}", err=True)
         
         # Checkout the branch (it should exist since this is a continue operation)
         click.echo(f"🌿 Checking out branch '{task_metadata.branch_name}'...")
-        checkout_result = container.exec_run(
+        checkout_result = container_runner.exec_in_container_as_user(
+            container,
             f"git checkout {task_metadata.branch_name}",
+            user='node',
             workdir=DEFAULT_WORKDIR
         )
         
-        if checkout_result.exit_code != 0:
-            click.echo(f"\n❌ Error: Failed to checkout branch\n{checkout_result.output.decode()}", err=True)
+        exit_code, output = _get_exec_result(checkout_result)
+        if exit_code != 0:
+            click.echo(f"\n❌ Error: Failed to checkout branch\n{output.decode()}", err=True)
             raise Exception("Failed to checkout branch")
         
         # Pull latest changes from the remote feature branch
         click.echo(f"📥 Pulling latest changes from origin/{task_metadata.branch_name}...")
-        pull_result = container.exec_run(
+        pull_result = container_runner.exec_in_container_as_user(
+            container,
             f"git pull origin {task_metadata.branch_name}",
+            user='node',
             workdir=DEFAULT_WORKDIR
         )
         
-        if pull_result.exit_code != 0:
-            click.echo(f"⚠️  Warning: Failed to pull latest changes\n{pull_result.output.decode()}", err=True)
+        exit_code, output = _get_exec_result(pull_result)
+        if exit_code != 0:
+            click.echo(f"⚠️  Warning: Failed to pull latest changes\n{output.decode()}", err=True)
             # Continue anyway, as the branch might not have been pushed yet
         
         # Build context for Claude
@@ -296,14 +321,31 @@ Please continue working on this task based on the feedback provided."""
             click.echo(f"   MCP config: {mcp_path}")
         
         claude_output = []
-        claude_result = container.exec_run(
+        claude_result = container_runner.exec_in_container_as_user(
+            container,
             claude_cmd,
+            user='node',
             workdir=DEFAULT_WORKDIR,
             stream=True
         )
         
-        for chunk in claude_result.output:
-            decoded_chunk = chunk.decode()
+        # For streaming results, we need to handle the output differently
+        if hasattr(claude_result, 'output'):
+            # Mock result format
+            output_stream = claude_result.output
+        else:
+            # Real docker format - when stream=True, it returns a generator directly
+            output_stream = claude_result
+        
+        for chunk in output_stream:
+            # Handle different types of streaming output
+            if isinstance(chunk, bytes):
+                decoded_chunk = chunk.decode()
+            elif isinstance(chunk, int):
+                # Docker streaming sometimes yields individual bytes as integers
+                decoded_chunk = chr(chunk)
+            else:
+                decoded_chunk = str(chunk)
             click.echo(decoded_chunk, nl=False)
             claude_output.append(decoded_chunk)
         
@@ -317,12 +359,20 @@ Please continue working on this task based on the feedback provided."""
         # Commit changes
         click.echo("\n\n💾 Having Claude commit the changes...")
         
-        status_result = container.exec_run(
+        status_result = container_runner.exec_in_container_as_user(
+            container,
             "git status --porcelain",
+            user='node',
             workdir=DEFAULT_WORKDIR
         )
         
-        if not status_result.output.strip():
+        exit_code, output = _get_exec_result(status_result)
+        # Handle case where output might be an iterator (shouldn't happen for non-streaming commands)
+        if hasattr(output, '__iter__') and not isinstance(output, (bytes, str)):
+            # Consume the iterator and join the results
+            output = b''.join(output)
+        
+        if not output.strip():
             click.echo("ℹ️  No changes to commit")
         else:
             commit_prompt = f"Please commit all the changes you made. Create a meaningful commit message that describes what was accomplished based on the feedback: {feedback_content}"
@@ -336,14 +386,31 @@ Please continue working on this task based on the feedback provided."""
                 commit_cmd.extend(["--mcp-config", mcp_path])
             
             commit_output = []
-            commit_result = container.exec_run(
+            commit_result = container_runner.exec_in_container_as_user(
+                container,
                 commit_cmd,
+                user='node',
                 workdir=DEFAULT_WORKDIR,
                 stream=True
             )
             
-            for chunk in commit_result.output:
-                decoded_chunk = chunk.decode()
+            # For streaming results, we need to handle the output differently
+            if hasattr(commit_result, 'output'):
+                # Mock result format
+                output_stream = commit_result.output
+            else:
+                # Real docker format - when stream=True, it returns a generator directly
+                output_stream = commit_result
+            
+            for chunk in output_stream:
+                # Handle different types of streaming output
+                if isinstance(chunk, bytes):
+                    decoded_chunk = chunk.decode()
+                elif isinstance(chunk, int):
+                    # Docker streaming sometimes yields individual bytes as integers
+                    decoded_chunk = chr(chunk)
+                else:
+                    decoded_chunk = str(chunk)
                 click.echo(decoded_chunk, nl=False)
                 commit_output.append(decoded_chunk)
             
@@ -355,32 +422,41 @@ Please continue working on this task based on the feedback provided."""
             )
             
             # Check if a commit was actually made
-            get_commit_msg = container.exec_run(
+            get_commit_msg = container_runner.exec_in_container_as_user(
+                container,
                 "git log -1 --pretty=%B",
+                user='node',
                 workdir=DEFAULT_WORKDIR
             )
             
-            if get_commit_msg.exit_code == 0:
+            exit_code, output = _get_exec_result(get_commit_msg)
+            if exit_code == 0:
                 click.echo("\n\n✅ Changes committed successfully")
                 
                 # Get commit hash
-                get_commit_hash = container.exec_run(
+                get_commit_hash = container_runner.exec_in_container_as_user(
+                    container,
                     "git rev-parse HEAD",
+                    user='node',
                     workdir=DEFAULT_WORKDIR
                 )
-                if get_commit_hash.exit_code == 0:
-                    commit_hash = get_commit_hash.output.decode().strip()
+                exit_code, output = _get_exec_result(get_commit_hash)
+                if exit_code == 0:
+                    commit_hash = output.decode().strip()
                     storage_manager.update_task(task_metadata.id, commit_hash=commit_hash)
                 
                 # Push changes
                 click.echo(f"\n📤 Pushing changes to branch '{task_metadata.branch_name}'...")
-                push_result = container.exec_run(
+                push_result = container_runner.exec_in_container_as_user(
+                    container,
                     "git push",
+                    user='node',
                     workdir=DEFAULT_WORKDIR
                 )
                 
-                if push_result.exit_code != 0:
-                    click.echo(f"\n⚠️  Warning: Failed to push\n{push_result.output.decode()}", err=True)
+                exit_code, output = _get_exec_result(push_result)
+                if exit_code != 0:
+                    click.echo(f"\n⚠️  Warning: Failed to push\n{output.decode()}", err=True)
                 else:
                     click.echo("✅ Changes pushed successfully")
             else:
