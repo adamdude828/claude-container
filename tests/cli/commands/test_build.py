@@ -13,8 +13,7 @@ class TestBuildCommand:
     @patch('claude_container.cli.commands.build.get_docker_client')
     @patch('claude_container.cli.commands.build.ConfigManager')
     @patch('claude_container.core.dockerfile_generator.DockerfileGenerator')
-    @patch('claude_container.cli.commands.build.PathFinder')
-    def test_build_command_success(self, mock_path_finder_class, mock_generator_class, 
+    def test_build_command_success(self, mock_generator_class, 
                                   mock_config_manager_class, mock_get_docker_client, mock_subprocess, cli_runner):
         """Test successful build command."""
         # Setup git config mocks
@@ -24,10 +23,6 @@ class TestBuildCommand:
         mock_docker = MagicMock()
         mock_docker.image_exists.return_value = False
         mock_get_docker_client.return_value = mock_docker
-        
-        mock_path_finder = MagicMock()
-        mock_path_finder.find_claude_code.return_value = "/usr/local/bin/claude"
-        mock_path_finder_class.return_value = mock_path_finder
         
         mock_config_manager = MagicMock()
         mock_config = MagicMock()
@@ -58,25 +53,12 @@ class TestBuildCommand:
         
         assert result.exit_code == 1  # Should exit with error
     
-    @patch('claude_container.cli.commands.build.subprocess.check_output')
-    @patch('claude_container.cli.commands.build.get_docker_client')
-    @patch('claude_container.cli.commands.build.PathFinder')
-    def test_build_command_claude_not_found(self, mock_path_finder_class, mock_get_docker_client, mock_subprocess, cli_runner):
-        """Test build command when Claude Code is not found."""
-        # Setup git config mocks
-        mock_subprocess.side_effect = ["test@example.com", "Test User"]
-        
-        mock_docker = MagicMock()
-        mock_docker.image_exists.return_value = False  # Image doesn't exist, so it will try to build
-        mock_get_docker_client.return_value = mock_docker
-        
-        mock_path_finder = MagicMock()
-        mock_path_finder.find_claude_code.return_value = None
-        mock_path_finder_class.return_value = mock_path_finder
-        
-        result = cli_runner.invoke(build, [])
-        
-        assert "Claude Code executable not found" in result.output
+    def test_build_command_claude_not_found_removed(self):
+        """Test removed - Claude Code check is no longer performed during build."""
+        # This test has been removed because the build command no longer checks
+        # for Claude Code installation on the host system. Claude Code is installed
+        # inside the container during the build process.
+        pass
     
     @patch('claude_container.cli.commands.build.get_docker_client')
     def test_build_command_image_exists(self, mock_get_docker_client, cli_runner):
@@ -117,7 +99,7 @@ class TestBuildCommand:
         # Run command
         with cli_runner.isolated_filesystem():
             Path(".claude-container").mkdir()
-            result = cli_runner.invoke(build, ['--force-rebuild', '--claude-code-path=/usr/local/bin/claude'])
+            result = cli_runner.invoke(build, ['--force-rebuild'])
         
         # Verify
         assert result.exit_code == 0
@@ -156,8 +138,7 @@ class TestBuildCommand:
     @patch('claude_container.cli.commands.build.get_docker_client')
     @patch('claude_container.cli.commands.build.ConfigManager')
     @patch('claude_container.core.dockerfile_generator.DockerfileGenerator')
-    @patch('claude_container.cli.commands.build.PathFinder')
-    def test_build_command_moves_dockerignore(self, mock_path_finder_class, mock_generator_class, 
+    def test_build_command_moves_dockerignore(self, mock_generator_class, 
                                   mock_config_manager_class, mock_get_docker_client, mock_subprocess, cli_runner):
         """Test that build command temporarily moves .dockerignore file."""
         # Setup git config mocks
@@ -167,10 +148,6 @@ class TestBuildCommand:
         mock_docker = MagicMock()
         mock_docker.image_exists.return_value = False
         mock_get_docker_client.return_value = mock_docker
-        
-        mock_path_finder = MagicMock()
-        mock_path_finder.find_claude_code.return_value = "/usr/local/bin/claude"
-        mock_path_finder_class.return_value = mock_path_finder
         
         mock_config_manager = MagicMock()
         mock_config = MagicMock()

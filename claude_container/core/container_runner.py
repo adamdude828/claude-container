@@ -39,9 +39,13 @@ class ContainerRunner:
                               name: Optional[str] = None,
                               user: Optional[str] = None) -> Dict:
         """Get unified container configuration."""
+        # Get base volumes and check if SSH needs special handling
+        base_volumes = self._get_volumes()
+        volumes, ssh_needs_copying = self._prepare_ssh_handling(base_volumes, user)
+        
         config = {
             'image': self.image_name,
-            'volumes': self._get_volumes(),
+            'volumes': volumes,
             'working_dir': DEFAULT_WORKDIR,
             'environment': self._get_container_environment(auto_approve),
             'tty': tty,
@@ -50,8 +54,29 @@ class ContainerRunner:
             'remove': remove
         }
         
-        if command:
-            config['command'] = command
+        # Handle command modification for SSH copying
+        if command and ssh_needs_copying and user == 'node':
+            # Wrap the command to copy SSH first
+            if isinstance(command, list):
+                cmd_str = ' '.join(command)
+            else:
+                cmd_str = command
+                
+            wrapped_command = [
+                '/bin/sh', '-c',
+                'cp -r /tmp/.ssh-host /home/node/.ssh && '
+                'chown -R node:node /home/node/.ssh && '
+                'chmod 700 /home/node/.ssh && '
+                'chmod 600 /home/node/.ssh/* 2>/dev/null; '
+                f'su - node -c "cd /workspace && {cmd_str}"'
+            ]
+            config['command'] = wrapped_command
+            # Don't set user since we need to run as root first
+        else:
+            if command:
+                config['command'] = command
+            if user:
+                config['user'] = user
             
         if stdout:
             config['stdout'] = stdout
@@ -61,9 +86,6 @@ class ContainerRunner:
             
         if name:
             config['name'] = name
-            
-        if user:
-            config['user'] = user
             
         return config
     
@@ -175,6 +197,26 @@ class ContainerRunner:
             print(f"Error running container: {e}")
     
     
+    def _prepare_ssh_handling(self, volumes: Dict[str, Dict[str, str]], user: Optional[str] = None) -> tuple[Dict[str, Dict[str, str]], bool]:
+        """Prepare volumes for SSH handling.
+        
+        Returns:
+            Tuple of (modified_volumes, ssh_needs_copying)
+        """
+        ssh_needs_copying = False
+        modified_volumes = volumes.copy()
+        
+        # Check if we need to handle SSH specially for node user
+        for host_path, mount_info in list(volumes.items()):
+            if mount_info['bind'] == '/home/node/.ssh' and user == 'node':
+                # Remove the direct mount and add temp mount instead
+                del modified_volumes[host_path]
+                modified_volumes[host_path] = {'bind': '/tmp/.ssh-host', 'mode': 'ro'}
+                ssh_needs_copying = True
+                break
+                
+        return modified_volumes, ssh_needs_copying
+    
     def _get_volumes(self) -> Dict[str, Dict[str, str]]:
         """Get volume mappings for the container."""
         volumes = {}
@@ -226,20 +268,41 @@ class ContainerRunner:
         for key, value in env.items():
             docker_cmd.extend(['-e', f'{key}={value}'])
         
+        # Get volumes and check if SSH needs special handling
+        base_volumes = self._get_volumes()
+        volumes, ssh_needs_copying = self._prepare_ssh_handling(base_volumes, user)
+        
         # Add volume mounts
-        volumes = self._get_volumes()
         for host_path, mount_info in volumes.items():
             bind_path = mount_info['bind']
             mode = mount_info.get('mode', 'rw')
             docker_cmd.extend(['-v', f'{host_path}:{bind_path}:{mode}'])
         
-        # Add user if specified
-        if user:
-            docker_cmd.extend(['--user', user])
-        
-        # Add image and command
+        # Add image
         docker_cmd.append(self.image_name)
-        docker_cmd.extend(cmd)
+        
+        # If SSH needs copying for node user, we need to copy keys as root first
+        if ssh_needs_copying and user == 'node':
+            # Don't add user flag yet - we'll run as root first to copy SSH keys
+            # Create a wrapper command that copies SSH keys as root, then switches to node user
+            wrapper_cmd = [
+                '/bin/sh', '-c',
+                'cp -r /tmp/.ssh-host /home/node/.ssh && '
+                'chown -R node:node /home/node/.ssh && '
+                'chmod 700 /home/node/.ssh && '
+                'chmod 600 /home/node/.ssh/* 2>/dev/null; '
+                'exec su - node -c "cd /workspace && exec $*"',
+                '--'  # This separates the shell script from the actual command
+            ]
+            docker_cmd.extend(wrapper_cmd)
+            # Convert cmd list to a single string for the su command
+            docker_cmd.append(' '.join(cmd))
+        else:
+            # Add user if specified (for non-SSH cases or non-node users)
+            if user:
+                docker_cmd.extend(['--user', user])
+            # Add the original command
+            docker_cmd.extend(cmd)
         
         # Run with subprocess for proper TTY handling
         subprocess.run(docker_cmd)
