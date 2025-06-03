@@ -201,6 +201,48 @@ claude-container clean images
 claude-container clean all
 ```
 
+### Managing MCP (Model Context Protocol) Servers
+
+Claude Container supports dynamic MCP server configuration for tasks. MCP servers provide additional context and capabilities to Claude.
+
+```bash
+# List registered MCP servers
+claude-container mcp list
+
+# Add a new MCP server
+claude-container mcp add context7 '{"type": "stdio", "command": "npx", "args": ["-y", "@upstash/context7-mcp"]}'
+
+# Add an HTTP MCP server
+claude-container mcp add telemetry '{"type": "http", "url": "https://mcp.example.com"}'
+
+# Load server config from file
+claude-container mcp add myserver @server-config.json
+
+# Remove an MCP server
+claude-container mcp remove context7
+```
+
+### Using MCP Servers with Tasks
+
+When creating or continuing tasks, you can specify which MCP servers to use:
+
+```bash
+# Create task with specific MCP servers
+claude-container task create --mcp context7,telemetry "Build a new feature"
+
+# Continue task with different servers (overrides previous selection)
+claude-container task continue task-id --mcp telemetry
+
+# Create task and select servers interactively (if MCP servers are registered)
+claude-container task create "Implement authentication"
+# Will prompt: Select MCP servers to use for this task
+```
+
+If no `--mcp` flag is provided:
+- In interactive mode: prompts you to select from available servers
+- In non-interactive mode (CI/scripts): uses all available servers
+- When continuing a task: uses the servers from the previous run
+
 ## Configuration
 
 Configuration is stored in `.claude-container/container_config.json`:
@@ -293,6 +335,32 @@ If the container build fails, check:
 - Make sure Docker Desktop is running
 - Check Docker status with: `docker info`
 - Ensure Docker daemon socket is accessible
+
+### Customize environments for non-Node.js projects
+
+The `customize` command allows you to interactively modify the container environment, perfect for projects that need additional dependencies or non-Node.js setups.
+
+```bash
+# Enter container interactively to install dependencies
+claude-container customize
+
+# Customize with a specific base image
+claude-container customize --base-image python:3.11
+
+# Customize without saving changes (dry run)
+claude-container customize --no-commit
+
+# Customize and save with a specific tag
+claude-container customize --tag my-project-custom
+```
+
+Inside the customize session, you can:
+- Install system packages: `apt-get install postgresql-client`
+- Set up Python environments: `pip install -r requirements.txt`
+- Configure databases or other services
+- Install language-specific tools
+
+When you exit the container, your changes are automatically saved as a new image that will be used by `claude-container run` and other commands.
 
 ## How it Works
 

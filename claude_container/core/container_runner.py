@@ -3,10 +3,10 @@
 from pathlib import Path
 from typing import List, Optional, Dict
 import subprocess
-import docker.errors
 import uuid
 
-from .docker_client import DockerClient
+from ..services.docker_service import DockerService
+from ..services.exceptions import DockerServiceError
 from ..core.constants import DEFAULT_WORKDIR, CONTAINER_PREFIX
 
 
@@ -18,7 +18,7 @@ class ContainerRunner:
         self.project_root = project_root
         self.data_dir = data_dir
         self.image_name = image_name
-        self.docker_client = DockerClient()
+        self.docker_service = DockerService()
     
     def _get_container_environment(self, auto_approve: bool = False) -> Dict[str, str]:
         """Get standard environment variables for container."""
@@ -66,7 +66,7 @@ class ContainerRunner:
     def run_command(self, command: List[str]):
         """Run a command in the container."""
         # Check if Docker image exists
-        if not self.docker_client.image_exists(self.image_name):
+        if not self.docker_service.image_exists(self.image_name):
             print(f"Error: Docker image '{self.image_name}' not found.")
             print("Please run 'claude-container build' first to create the container image.")
             return
@@ -106,7 +106,9 @@ class ContainerRunner:
                     detach=True,
                     remove=False  # We'll remove it manually after getting logs
                 )
-                container = self.docker_client.client.containers.run(**config)
+                container = self.docker_service.run_container(
+                    **config
+                )
                 
                 # Wait for container to finish
                 result = container.wait()
@@ -155,26 +157,14 @@ class ContainerRunner:
                     stdout=True,
                     stderr=True
                 )
-                result = self.docker_client.client.containers.run(**config)
+                result = self.docker_service.run_container(
+                    **config
+                )
                 print(result.decode('utf-8') if isinstance(result, bytes) else result)
-        except docker.errors.ContainerError as e:
+        except DockerServiceError as e:
             # More detailed error handling for container errors
             cmd_str = ' '.join(cmd) if isinstance(cmd, list) else str(cmd)
-            print(f"Error: Command '{cmd_str}' in container returned non-zero exit status {e.exit_status}")
-            
-            # Show stderr if available
-            if e.stderr:
-                stderr_content = e.stderr.decode('utf-8') if isinstance(e.stderr, bytes) else e.stderr
-                if stderr_content.strip():
-                    print("\nError output (stderr):")
-                    print(stderr_content)
-            
-            # Show stdout if available (sometimes errors go to stdout)
-            if hasattr(e, 'output') and e.output:
-                output_content = e.output.decode('utf-8') if isinstance(e.output, bytes) else e.output
-                if output_content.strip():
-                    print("\nStandard output:")
-                    print(output_content)
+            print(f"Error running command '{cmd_str}': {e}")
         except Exception as e:
             print(f"Error running container: {e}")
     
@@ -287,7 +277,48 @@ class ContainerRunner:
         }
         
         try:
-            container = self.docker_client.client.containers.run(**config)
+            container = self.docker_service.run_container(**config)
             return container
         except Exception as e:
             raise RuntimeError(f"Failed to create container: {e}")
+    
+    def write_file(self, container, file_path: str, content: str) -> None:
+        """Write a file inside a running container.
+        
+        Args:
+            container: Docker container object
+            file_path: Path inside container to write to
+            content: Content to write to the file
+        """
+        # Escape content for shell
+        escaped_content = content.replace("'", "'\"'\"'")
+        
+        # Use echo with heredoc for reliable content writing
+        command = f"sh -c 'cat > {file_path} << '\''EOF'\''\n{escaped_content}\nEOF'"
+        
+        try:
+            result = self.docker_service.exec_in_container(
+                container,
+                command,
+                stream=False,
+                tty=False
+            )
+            
+            # Check if command succeeded
+            # exec_in_container returns a dict for non-streaming calls
+            if isinstance(result, dict):
+                exit_code = result.get('ExitCode', 1)
+                if exit_code != 0:
+                    stderr = result.get('stderr', b'').decode('utf-8')
+                    raise RuntimeError(f"Failed to write file: {stderr}")
+            else:
+                # Handle ExecResult object (shouldn't happen with stream=False)
+                exit_code = result.exit_code if hasattr(result, 'exit_code') else result[0]
+                if exit_code != 0:
+                    output = result.output if hasattr(result, 'output') else result[1]
+                    if isinstance(output, bytes):
+                        output = output.decode('utf-8')
+                    raise RuntimeError(f"Failed to write file: {output}")
+                
+        except Exception as e:
+            raise RuntimeError(f"Failed to write file {file_path}: {e}")

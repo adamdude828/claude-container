@@ -7,11 +7,11 @@ from claude_container.core.container_runner import ContainerRunner
 class TestContainerRunner:
     """Smoke tests for ContainerRunner functionality."""
     
-    @patch('claude_container.core.container_runner.DockerClient')
-    def test_container_runner_initialization(self, mock_docker_client_class, temp_project_dir):
+    @patch('claude_container.core.container_runner.DockerService')
+    def test_container_runner_initialization(self, mock_docker_service_class, temp_project_dir):
         """Test that ContainerRunner initializes correctly."""
         mock_docker = MagicMock()
-        mock_docker_client_class.return_value = mock_docker
+        mock_docker_service_class.return_value = mock_docker
         
         data_dir = temp_project_dir / ".claude-container"
         runner = ContainerRunner(temp_project_dir, data_dir, "test-image")
@@ -19,14 +19,14 @@ class TestContainerRunner:
         assert runner.project_root == temp_project_dir
         assert runner.data_dir == data_dir
         assert runner.image_name == "test-image"
-        assert runner.docker_client == mock_docker
+        assert runner.docker_service == mock_docker
     
-    @patch('claude_container.core.container_runner.DockerClient')
-    def test_run_command_image_not_exists(self, mock_docker_client_class, temp_project_dir, capsys):
+    @patch('claude_container.core.container_runner.DockerService')
+    def test_run_command_image_not_exists(self, mock_docker_service_class, temp_project_dir, capsys):
         """Test running command when image doesn't exist."""
         mock_docker = MagicMock()
         mock_docker.image_exists.return_value = False
-        mock_docker_client_class.return_value = mock_docker
+        mock_docker_service_class.return_value = mock_docker
         
         data_dir = temp_project_dir / ".claude-container"
         runner = ContainerRunner(temp_project_dir, data_dir, "test-image")
@@ -36,16 +36,16 @@ class TestContainerRunner:
         assert "Docker image 'test-image' not found" in captured.out
         assert "Please run 'claude-container build' first" in captured.out
     
-    @patch('claude_container.core.container_runner.DockerClient')
-    def test_run_command_success(self, mock_docker_client_class, temp_project_dir):
+    @patch('claude_container.core.container_runner.DockerService')
+    def test_run_command_success(self, mock_docker_service_class, temp_project_dir):
         """Test successful command run."""
         # Setup mocks
         mock_docker = MagicMock()
         mock_docker.image_exists.return_value = True
         mock_container = MagicMock()
         mock_container.decode.return_value = "Hello from container"
-        mock_docker.client.containers.run.return_value = b"Hello from container"
-        mock_docker_client_class.return_value = mock_docker
+        mock_docker.run_container.return_value = b"Hello from container"
+        mock_docker_service_class.return_value = mock_docker
         
         # Test
         data_dir = temp_project_dir / ".claude-container"
@@ -53,20 +53,20 @@ class TestContainerRunner:
         runner.run_command(["echo", "hello"])
         
         # Verify
-        mock_docker.client.containers.run.assert_called_once()
-        call_kwargs = mock_docker.client.containers.run.call_args[1]
+        mock_docker.run_container.assert_called_once()
+        call_kwargs = mock_docker.run_container.call_args[1]
         assert call_kwargs['working_dir'] == '/workspace'
         assert call_kwargs['remove'] is True
     
     
-    @patch('claude_container.core.container_runner.DockerClient')
-    def test_create_persistent_container(self, mock_docker_client_class, temp_project_dir):
+    @patch('claude_container.core.container_runner.DockerService')
+    def test_create_persistent_container(self, mock_docker_service_class, temp_project_dir):
         """Test creating a persistent container for tasks."""
         # Setup mocks
         mock_docker = MagicMock()
         mock_container = MagicMock()
-        mock_docker.client.containers.run.return_value = mock_container
-        mock_docker_client_class.return_value = mock_docker
+        mock_docker.run_container.return_value = mock_container
+        mock_docker_service_class.return_value = mock_docker
         
         # Test
         data_dir = temp_project_dir / ".claude-container"
@@ -75,10 +75,10 @@ class TestContainerRunner:
         
         # Verify
         assert result == mock_container
-        mock_docker.client.containers.run.assert_called_once()
+        mock_docker.run_container.assert_called_once()
         
         # Check configuration
-        call_kwargs = mock_docker.client.containers.run.call_args[1]
+        call_kwargs = mock_docker.run_container.call_args[1]
         assert call_kwargs['command'] == "sleep infinity"
         assert call_kwargs['detach'] is True
         assert call_kwargs['remove'] is False  # Should not auto-remove
@@ -217,12 +217,12 @@ class TestContainerRunner:
         assert 'test-image' in docker_cmd
         assert 'bash' in docker_cmd
     
-    @patch('claude_container.core.container_runner.DockerClient')
-    def test_run_command_no_command(self, mock_docker_client_class, temp_project_dir):
+    @patch('claude_container.core.container_runner.DockerService')
+    def test_run_command_no_command(self, mock_docker_service_class, temp_project_dir):
         """Test running command with no arguments (interactive shell)."""
         mock_docker = MagicMock()
         mock_docker.image_exists.return_value = True
-        mock_docker_client_class.return_value = mock_docker
+        mock_docker_service_class.return_value = mock_docker
         
         data_dir = temp_project_dir / ".claude-container"
         runner = ContainerRunner(temp_project_dir, data_dir, "test-image")
@@ -231,12 +231,12 @@ class TestContainerRunner:
             runner.run_command([])
             mock_interactive.assert_called_once_with(['/bin/bash'])
     
-    @patch('claude_container.core.container_runner.DockerClient')
-    def test_run_command_claude_interactive(self, mock_docker_client_class, temp_project_dir):
+    @patch('claude_container.core.container_runner.DockerService')
+    def test_run_command_claude_interactive(self, mock_docker_service_class, temp_project_dir):
         """Test running interactive claude command."""
         mock_docker = MagicMock()
         mock_docker.image_exists.return_value = True
-        mock_docker_client_class.return_value = mock_docker
+        mock_docker_service_class.return_value = mock_docker
         
         data_dir = temp_project_dir / ".claude-container"
         runner = ContainerRunner(temp_project_dir, data_dir, "test-image")
@@ -245,8 +245,8 @@ class TestContainerRunner:
             runner.run_command(['claude'])
             mock_interactive.assert_called_once_with(['claude'])
     
-    @patch('claude_container.core.container_runner.DockerClient')
-    def test_run_command_claude_non_interactive_success(self, mock_docker_client_class, temp_project_dir, capsys):
+    @patch('claude_container.core.container_runner.DockerService')
+    def test_run_command_claude_non_interactive_success(self, mock_docker_service_class, temp_project_dir, capsys):
         """Test running non-interactive claude command successfully."""
         mock_docker = MagicMock()
         mock_docker.image_exists.return_value = True
@@ -255,9 +255,9 @@ class TestContainerRunner:
         mock_container = MagicMock()
         mock_container.wait.return_value = {'StatusCode': 0}
         mock_container.logs.return_value = b"Task completed successfully"
-        mock_docker.client.containers.run.return_value = mock_container
+        mock_docker.run_container.return_value = mock_container
         
-        mock_docker_client_class.return_value = mock_docker
+        mock_docker_service_class.return_value = mock_docker
         
         data_dir = temp_project_dir / ".claude-container"
         runner = ContainerRunner(temp_project_dir, data_dir, "test-image")
@@ -268,8 +268,8 @@ class TestContainerRunner:
         assert "Task completed successfully" in captured.out
         mock_container.remove.assert_called_once()
     
-    @patch('claude_container.core.container_runner.DockerClient')
-    def test_run_command_claude_non_interactive_failure(self, mock_docker_client_class, temp_project_dir, capsys):
+    @patch('claude_container.core.container_runner.DockerService')
+    def test_run_command_claude_non_interactive_failure(self, mock_docker_service_class, temp_project_dir, capsys):
         """Test running non-interactive claude command that fails."""
         mock_docker = MagicMock()
         mock_docker.image_exists.return_value = True
@@ -278,9 +278,9 @@ class TestContainerRunner:
         mock_container = MagicMock()
         mock_container.wait.return_value = {'StatusCode': 1}
         mock_container.logs.return_value = b"Error: Task failed"
-        mock_docker.client.containers.run.return_value = mock_container
+        mock_docker.run_container.return_value = mock_container
         
-        mock_docker_client_class.return_value = mock_docker
+        mock_docker_service_class.return_value = mock_docker
         
         data_dir = temp_project_dir / ".claude-container"
         runner = ContainerRunner(temp_project_dir, data_dir, "test-image")
@@ -292,13 +292,13 @@ class TestContainerRunner:
         assert "Error: Task failed" in captured.out
         mock_container.remove.assert_called_once()
     
-    @patch('claude_container.core.container_runner.DockerClient')
-    def test_run_command_shell_syntax(self, mock_docker_client_class, temp_project_dir):
+    @patch('claude_container.core.container_runner.DockerService')
+    def test_run_command_shell_syntax(self, mock_docker_service_class, temp_project_dir):
         """Test running command with shell syntax."""
         mock_docker = MagicMock()
         mock_docker.image_exists.return_value = True
-        mock_docker.client.containers.run.return_value = b"file1.txt file2.txt"
-        mock_docker_client_class.return_value = mock_docker
+        mock_docker.run_container.return_value = b"file1.txt file2.txt"
+        mock_docker_service_class.return_value = mock_docker
         
         data_dir = temp_project_dir / ".claude-container"
         runner = ContainerRunner(temp_project_dir, data_dir, "test-image")
@@ -306,24 +306,23 @@ class TestContainerRunner:
         runner.run_command(['ls *.txt'])
         
         # Verify shell was used
-        call_kwargs = mock_docker.client.containers.run.call_args[1]
+        call_kwargs = mock_docker.run_container.call_args[1]
         assert call_kwargs['command'] == ['/bin/sh', '-c', 'ls *.txt']
     
-    @patch('claude_container.core.container_runner.DockerClient')
-    @patch('claude_container.core.container_runner.docker.errors.ContainerError', Exception)
-    def test_run_command_container_error(self, mock_docker_client_class, temp_project_dir, capsys):
+    @patch('claude_container.core.container_runner.DockerService')
+    def test_run_command_container_error(self, mock_docker_service_class, temp_project_dir, capsys):
         """Test handling container errors."""
         mock_docker = MagicMock()
         mock_docker.image_exists.return_value = True
         
-        # Create a mock error with the expected attributes
-        error = Exception("Container error")
-        error.exit_status = 127
-        error.stderr = b"Command not found"
-        error.output = b"Some output"
+        # Import the exception
+        from claude_container.services.exceptions import DockerServiceError
         
-        mock_docker.client.containers.run.side_effect = error
-        mock_docker_client_class.return_value = mock_docker
+        # Create a mock error
+        error = DockerServiceError("Container exited with error: Command not found")
+        
+        mock_docker.run_container.side_effect = error
+        mock_docker_service_class.return_value = mock_docker
         
         data_dir = temp_project_dir / ".claude-container"
         runner = ContainerRunner(temp_project_dir, data_dir, "test-image")
@@ -331,9 +330,8 @@ class TestContainerRunner:
         runner.run_command(['nonexistent'])
         
         captured = capsys.readouterr()
-        # The actual error message is more specific
-        assert "Error: Command 'nonexistent' in container returned non-zero exit status 127" in captured.out
-        assert "Command not found" in captured.out
+        # The error message from DockerServiceError
+        assert "Error running command 'nonexistent': Container exited with error: Command not found" in captured.out
     
     def test_attach_and_cleanup(self, temp_project_dir, capsys):
         """Test attaching to container and cleanup."""
@@ -364,15 +362,96 @@ class TestContainerRunner:
         mock_container.stop.assert_called_once()
         mock_container.remove.assert_called_once()
     
-    @patch('claude_container.core.container_runner.DockerClient')
-    def test_create_persistent_container_failure(self, mock_docker_client_class, temp_project_dir):
+    @patch('claude_container.core.container_runner.DockerService')
+    def test_create_persistent_container_failure(self, mock_docker_service_class, temp_project_dir):
         """Test handling failure when creating persistent container."""
         mock_docker = MagicMock()
-        mock_docker.client.containers.run.side_effect = Exception("Docker error")
-        mock_docker_client_class.return_value = mock_docker
+        mock_docker.run_container.side_effect = Exception("Docker error")
+        mock_docker_service_class.return_value = mock_docker
         
         data_dir = temp_project_dir / ".claude-container"
         runner = ContainerRunner(temp_project_dir, data_dir, "test-image")
         
         with pytest.raises(RuntimeError, match="Failed to create container"):
             runner.create_persistent_container("task")
+    
+    @patch('claude_container.core.container_runner.DockerService')
+    def test_write_file_success(self, mock_docker_service_class, temp_project_dir):
+        """Test successfully writing a file to container."""
+        mock_docker = MagicMock()
+        mock_result = {'ExitCode': 0, 'stderr': b''}
+        mock_docker.exec_in_container.return_value = mock_result
+        mock_docker_service_class.return_value = mock_docker
+        
+        mock_container = MagicMock()
+        
+        data_dir = temp_project_dir / ".claude-container"
+        runner = ContainerRunner(temp_project_dir, data_dir, "test-image")
+        
+        # Test simple content
+        runner.write_file(mock_container, "/test/file.txt", "Hello World")
+        
+        # Verify exec was called
+        mock_docker.exec_in_container.assert_called_once_with(
+            mock_container,
+            "sh -c 'cat > /test/file.txt << '''EOF'''\nHello World\nEOF'",
+            stream=False,
+            tty=False
+        )
+    
+    @patch('claude_container.core.container_runner.DockerService')
+    def test_write_file_with_quotes(self, mock_docker_service_class, temp_project_dir):
+        """Test writing file content with quotes."""
+        mock_docker = MagicMock()
+        mock_result = {'ExitCode': 0, 'stderr': b''}
+        mock_docker.exec_in_container.return_value = mock_result
+        mock_docker_service_class.return_value = mock_docker
+        
+        mock_container = MagicMock()
+        
+        data_dir = temp_project_dir / ".claude-container"
+        runner = ContainerRunner(temp_project_dir, data_dir, "test-image")
+        
+        # Test content with quotes
+        content = "This has 'single quotes' in it"
+        runner.write_file(mock_container, "/test/file.txt", content)
+        
+        # Verify quotes were escaped properly
+        expected_content = "This has '\"'\"'single quotes'\"'\"' in it"
+        mock_docker.exec_in_container.assert_called_once_with(
+            mock_container,
+            f"sh -c 'cat > /test/file.txt << '''EOF'''\n{expected_content}\nEOF'",
+            stream=False,
+            tty=False
+        )
+    
+    @patch('claude_container.core.container_runner.DockerService')
+    def test_write_file_failure(self, mock_docker_service_class, temp_project_dir):
+        """Test handling write file failure."""
+        mock_docker = MagicMock()
+        mock_result = {'ExitCode': 1, 'stderr': b'Permission denied'}
+        mock_docker.exec_in_container.return_value = mock_result
+        mock_docker_service_class.return_value = mock_docker
+        
+        mock_container = MagicMock()
+        
+        data_dir = temp_project_dir / ".claude-container"
+        runner = ContainerRunner(temp_project_dir, data_dir, "test-image")
+        
+        with pytest.raises(RuntimeError, match="Failed to write file: Permission denied"):
+            runner.write_file(mock_container, "/test/file.txt", "Hello")
+    
+    @patch('claude_container.core.container_runner.DockerService')
+    def test_write_file_exception(self, mock_docker_service_class, temp_project_dir):
+        """Test handling exception during file write."""
+        mock_docker = MagicMock()
+        mock_docker.exec_in_container.side_effect = Exception("Docker error")
+        mock_docker_service_class.return_value = mock_docker
+        
+        mock_container = MagicMock()
+        
+        data_dir = temp_project_dir / ".claude-container"
+        runner = ContainerRunner(temp_project_dir, data_dir, "test-image")
+        
+        with pytest.raises(RuntimeError, match="Failed to write file /test/file.txt: Docker error"):
+            runner.write_file(mock_container, "/test/file.txt", "Hello")

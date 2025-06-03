@@ -18,3 +18,5 @@ class ContainerConfig(BaseModel):
     base_image: str = "node:20"
     include_code: bool = False
     cached_image_tag: Optional[str] = None
+    customized: bool = False
+    customized_at: Optional[str] = None

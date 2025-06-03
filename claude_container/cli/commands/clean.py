@@ -4,7 +4,8 @@ import click
 import shutil
 from pathlib import Path
 
-from ...core.docker_client import DockerClient
+from ...services.docker_service import DockerService
+from ...services.exceptions import DockerServiceError, ImageNotFoundError
 from ...core.constants import DATA_DIR_NAME, CONTAINER_PREFIX
 
 
@@ -17,19 +18,42 @@ def clean(containers, force):
     data_dir = project_root / DATA_DIR_NAME
     
     try:
-        # Initialize Docker client
-        docker_client = DockerClient()
+        # Initialize Docker service
+        docker_service = DockerService()
         
         # Clean up task containers if requested
         if containers:
             click.echo("Cleaning up task containers...")
             # Use the project-specific prefix pattern
             name_prefix = f"{CONTAINER_PREFIX}-task-{project_root.name}".lower()
-            removed = docker_client.cleanup_task_containers(
-                name_prefix=name_prefix,
-                project_name=project_root.name,
-                force=force
+            
+            # List containers with claude-container label
+            containers = docker_service.list_containers(
+                all=True,
+                labels={
+                    "claude-container": "true",
+                    "claude-container-project": project_root.name.lower()
+                }
             )
+            
+            # Filter by name prefix if needed
+            containers = [c for c in containers if c.name.startswith(name_prefix)]
+            removed = 0
+            
+            for container in containers:
+                try:
+                    if container.status == 'running' and not force:
+                        click.echo(f"Skipping running container: {container.name}")
+                        continue
+                    
+                    if container.status == 'running':
+                        container.stop()
+                    
+                    docker_service.remove_container(container)
+                    click.echo(f"Removed container: {container.name}")
+                    removed += 1
+                except Exception as e:
+                    click.echo(f"Failed to remove container {container.name}: {e}")
             if removed > 0:
                 click.echo(f"Removed {removed} task container(s)")
             else:
@@ -39,8 +63,14 @@ def clean(containers, force):
         if data_dir.exists():
             image_name = f"{CONTAINER_PREFIX}-{project_root.name}".lower()
             
-            if docker_client.image_exists(image_name):
-                docker_client.remove_image(image_name)
+            if docker_service.image_exists(image_name):
+                try:
+                    docker_service.remove_image(image_name)
+                    click.echo(f"Removed image: {image_name}")
+                except ImageNotFoundError:
+                    pass  # Image was already gone
+                except Exception as e:
+                    click.echo(f"Warning: Could not remove image {image_name}: {e}")
             
             # Remove data directory
             shutil.rmtree(data_dir)
@@ -48,6 +78,9 @@ def clean(containers, force):
         else:
             click.echo("No container data found")
             
-    except RuntimeError as e:
+    except DockerServiceError as e:
         click.echo(f"Error: {e}", err=True)
+        return
+    except Exception as e:
+        click.echo(f"Unexpected error: {e}", err=True)
         return

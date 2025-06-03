@@ -2,7 +2,8 @@
 
 from pathlib import Path
 
-from .docker_client import DockerClient
+from ..services.docker_service import DockerService
+from ..services.exceptions import DockerServiceError, ImageNotFoundError
 from .dockerfile_generator import DockerfileGenerator
 from ..utils.permissions_manager import PermissionsManager
 from ..utils.config_manager import ConfigManager
@@ -16,7 +17,7 @@ class ImageBuilder:
         """Initialize image builder."""
         self.project_root = project_root
         self.data_dir = data_dir
-        self.docker_client = DockerClient()
+        self.docker_service = DockerService()
         self.dockerfile_generator = DockerfileGenerator(project_root)
         self.config_manager = ConfigManager(data_dir)
         self.image_name = f"{CONTAINER_PREFIX}-{project_root.name}".lower()
@@ -24,12 +25,15 @@ class ImageBuilder:
     def build(self, claude_code_path: str, force_rebuild: bool = False) -> str:
         """Build Docker image using Claude Code."""
         # Check if rebuild is needed
-        if not force_rebuild and self.docker_client.image_exists(self.image_name):
+        if not force_rebuild and self.docker_service.image_exists(self.image_name):
             return self.image_name
         
         # Remove existing image if force rebuild
-        if force_rebuild and self.docker_client.image_exists(self.image_name):
-            self.docker_client.remove_image(self.image_name)
+        if force_rebuild and self.docker_service.image_exists(self.image_name):
+            try:
+                self.docker_service.remove_image(self.image_name)
+            except ImageNotFoundError:
+                pass  # Image was already gone
         
         # Set up permissions and generate Dockerfile
         permissions_manager = PermissionsManager()
@@ -68,9 +72,16 @@ class ImageBuilder:
     
     def _build_image(self, dockerfile_path: Path):
         """Build Docker image from Dockerfile."""
-        self.docker_client.build_image(
-            path=str(self.project_root),
-            dockerfile=str(dockerfile_path),
-            tag=self.image_name,
-            rm=True
-        )
+        try:
+            image, logs = self.docker_service.build_image(
+                path=str(self.project_root),
+                dockerfile=str(dockerfile_path),
+                tag=self.image_name,
+                rm=True
+            )
+            # Print build logs if needed
+            for log in logs:
+                if 'stream' in log:
+                    print(log['stream'], end='')
+        except DockerServiceError as e:
+            raise RuntimeError(f"Failed to build Docker image: {e}") from e

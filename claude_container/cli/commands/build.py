@@ -1,14 +1,13 @@
 """Build command for Claude Container."""
 
 import click
-from pathlib import Path
 import subprocess
 
-from ...core.docker_client import DockerClient
+from claude_container.cli.helpers import get_project_context, get_docker_client
 from ...utils.path_finder import PathFinder
 from ...utils.config_manager import ConfigManager
 from ...models.container import ContainerConfig
-from ...core.constants import DATA_DIR_NAME, CONTAINER_PREFIX
+from ...core.constants import CONTAINER_PREFIX
 
 
 @click.command()
@@ -18,16 +17,11 @@ from ...core.constants import DATA_DIR_NAME, CONTAINER_PREFIX
 @click.option('--claude-code-path', envvar='CLAUDE_CODE_PATH', help='Path to Claude Code executable')
 def build(force_rebuild, no_cache, tag, claude_code_path):
     """Build Docker container with project code included"""
-    project_root = Path.cwd()
-    data_dir = project_root / DATA_DIR_NAME
+    project_root, data_dir = get_project_context()
     data_dir.mkdir(exist_ok=True)
     
-    try:
-        # Initialize Docker client (checks connection)
-        docker_client = DockerClient()
-    except RuntimeError as e:
-        click.echo(f"Error: {e}", err=True)
-        return
+    # Initialize Docker client (checks connection)
+    docker_client = get_docker_client()
     
     # Generate tag if not provided
     if not tag:
