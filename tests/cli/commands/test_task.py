@@ -223,10 +223,8 @@ class TestTaskCommand:
         mock_container = MagicMock()
         mock_container.id = "container-456"
         mock_container.exec_run.side_effect = [
-            # mkdir -p /workspace/.claude
-            MagicMock(exit_code=0, output=b""),
-            # echo settings > settings.local.json
-            MagicMock(exit_code=0, output=b""),
+            # Permission check
+            MagicMock(exit_code=0, output=b"test"),
             # git fetch --all
             MagicMock(exit_code=0, output=b"Fetching origin"),
             # git checkout branch
@@ -288,10 +286,8 @@ class TestTaskCommand:
         mock_container = MagicMock()
         mock_container.id = "container-456"
         mock_container.exec_run.side_effect = [
-            # mkdir -p /workspace/.claude
-            MagicMock(exit_code=0, output=b""),
-            # echo settings > settings.local.json
-            MagicMock(exit_code=0, output=b""),
+            # Permission check
+            MagicMock(exit_code=0, output=b"test"),
             # git fetch --all
             MagicMock(exit_code=0, output=b"Fetching origin"),
             # git checkout branch
