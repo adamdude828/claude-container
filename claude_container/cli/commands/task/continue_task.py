@@ -375,7 +375,20 @@ Please continue working on this task based on the feedback provided."""
         if not output.strip():
             click.echo("ℹ️  No changes to commit")
         else:
-            commit_prompt = f"Please commit all the changes you made. Create a meaningful commit message that describes what was accomplished based on the feedback: {feedback_content}"
+            commit_prompt = f"""Please commit all the changes you made. Review the changes with git diff and git status, then create a semantic commit message following the Conventional Commits specification.
+
+Use one of these types: feat, fix, docs, style, refactor, test, chore, perf, build, ci
+Format: <type>(<scope>): <description>
+
+Examples:
+- feat(auth): add OAuth2 login support
+- fix(api): resolve null pointer in user service
+- docs(readme): update installation instructions
+- refactor(core): simplify error handling logic
+
+Feedback context: {feedback_content}
+
+Create a concise, semantic commit message that describes what was accomplished. Do NOT include any attribution, emojis, or Co-Authored-By lines."""
             
             click.echo("\n🤖 Asking Claude to commit the changes...")
             click.echo("-" * 60 + "\n")

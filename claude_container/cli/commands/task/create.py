@@ -405,7 +405,20 @@ def create(branch, description_file, mcp):
             commit_message = None
         else:
             # Ask Claude to commit the changes
-            commit_prompt = f"Please commit all the changes you made. Review the changes with git diff and git status, then create a meaningful commit message that describes what was accomplished for the task: {task_description}"
+            commit_prompt = f"""Please commit all the changes you made. Review the changes with git diff and git status, then create a semantic commit message following the Conventional Commits specification.
+
+Use one of these types: feat, fix, docs, style, refactor, test, chore, perf, build, ci
+Format: <type>(<scope>): <description>
+
+Examples:
+- feat(auth): add OAuth2 login support
+- fix(api): resolve null pointer in user service
+- docs(readme): update installation instructions
+- refactor(core): simplify error handling logic
+
+Task context: {task_description}
+
+Create a concise, semantic commit message that describes what was accomplished. Do NOT include any attribution, emojis, or Co-Authored-By lines."""
             
             click.echo("\n🤖 Asking Claude to commit the changes...")
             click.echo("-" * 60 + "\n")
