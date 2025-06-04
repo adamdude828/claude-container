@@ -12,7 +12,7 @@
   "custom_commands": [],
   "base_image": "node:20",
   "include_code": true,
-  "cached_image_tag": "test-ssh-fix",
+  "cached_image_tag": "claude-container-claude-local",
   "customized": true,
   "customized_at": "2025-06-03T16:48:38.419608"
 }

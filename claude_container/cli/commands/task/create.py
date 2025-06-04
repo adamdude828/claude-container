@@ -195,7 +195,7 @@ def create(branch, description_file, mcp):
                                     status=TaskStatus.CREATED)
         
         # Create persistent container for task execution
-        container = container_runner.create_persistent_container("task")
+        container = container_runner.create_persistent_container("task", user="node")
         storage_manager.update_task(task_metadata.id, container_id=container.id)
         
         # Check if permissions are accepted

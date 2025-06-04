@@ -456,3 +456,45 @@ class TestContainerRunner:
         
         with pytest.raises(RuntimeError, match="Failed to write file /test/file.txt: Docker error"):
             runner.write_file(mock_container, "/test/file.txt", "Hello")
+    
+    @patch('claude_container.core.container_runner.DockerService')
+    def test_exec_in_container_as_user_with_multiline_args(self, mock_docker_service_class, temp_project_dir):
+        """Test executing command with multi-line arguments properly escapes them."""
+        mock_docker = MagicMock()
+        mock_docker_service_class.return_value = mock_docker
+        
+        mock_container = MagicMock()
+        # Mock exec_run to return a tuple (exit_code, output)
+        mock_container.exec_run.return_value = (0, b"Success")
+        
+        data_dir = temp_project_dir / ".claude-container"
+        runner = ContainerRunner(temp_project_dir, data_dir, "test-image")
+        
+        # Test with multi-line task description
+        task_description = """Implement a new feature that:
+1. Adds user authentication
+2. Creates a dashboard
+3. Implements API endpoints"""
+        
+        # Execute command with multi-line argument
+        runner.exec_in_container_as_user(
+            mock_container,
+            ['claude', '--model=opus', '-p', task_description],
+            user='node'
+        )
+        
+        # Verify the command was properly escaped
+        mock_container.exec_run.assert_called()
+        actual_command = mock_container.exec_run.call_args[0][0]
+        
+        # Should be ['su', 'node', '-c', <escaped command>]
+        assert actual_command[0] == 'su'
+        assert actual_command[1] == 'node'
+        assert actual_command[2] == '-c'
+        
+        # The shell command should have the task description properly quoted
+        shell_command = actual_command[3]
+        assert 'claude --model=opus -p ' in shell_command
+        # The multi-line string should be wrapped in quotes
+        assert "'Implement a new feature that:" in shell_command or '"Implement a new feature that:' in shell_command
+        assert "3. Implements API endpoints'" in shell_command or '3. Implements API endpoints"' in shell_command

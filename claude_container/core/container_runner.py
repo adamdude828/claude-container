@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List, Optional, Dict
 import subprocess
 import uuid
+import shlex
 
 from ..services.docker_service import DockerService
 from ..services.exceptions import DockerServiceError
@@ -20,12 +21,23 @@ class ContainerRunner:
         self.image_name = image_name
         self.docker_service = DockerService()
     
-    def _get_container_environment(self, auto_approve: bool = False) -> Dict[str, str]:
-        """Get standard environment variables for container."""
+    def _get_container_environment(self, auto_approve: bool = False, user: Optional[str] = None) -> Dict[str, str]:
+        """Get standard environment variables for container.
+        
+        Args:
+            auto_approve: Whether to auto-approve Claude prompts
+            user: The user that will run in the container ('node' or None/root)
+        """
+        # Determine home directory based on user
+        if user == 'node':
+            home_dir = '/home/node'
+        else:
+            home_dir = '/root'
+            
         env = {
-            'CLAUDE_CONFIG_DIR': '/root/.claude',
+            'CLAUDE_CONFIG_DIR': f'{home_dir}/.claude',
             'NODE_OPTIONS': '--max-old-space-size=4096',
-            'HOME': '/root'
+            'HOME': home_dir
         }
             
         if auto_approve:
@@ -40,14 +52,14 @@ class ContainerRunner:
                               user: Optional[str] = None) -> Dict:
         """Get unified container configuration."""
         # Get base volumes and check if SSH needs special handling
-        base_volumes = self._get_volumes()
+        base_volumes = self._get_volumes(user)
         volumes, ssh_needs_copying = self._prepare_ssh_handling(base_volumes, user)
         
         config = {
             'image': self.image_name,
             'volumes': volumes,
             'working_dir': DEFAULT_WORKDIR,
-            'environment': self._get_container_environment(auto_approve),
+            'environment': self._get_container_environment(auto_approve, user),
             'tty': tty,
             'stdin_open': stdin_open,
             'detach': detach,
@@ -218,34 +230,45 @@ class ContainerRunner:
                 
         return modified_volumes, ssh_needs_copying
     
-    def _get_volumes(self) -> Dict[str, Dict[str, str]]:
-        """Get volume mappings for the container."""
+    def _get_volumes(self, user: Optional[str] = None) -> Dict[str, Dict[str, str]]:
+        """Get volume mappings for the container.
+        
+        Args:
+            user: The user that will run in the container ('node' or None/root)
+        """
         volumes = {}
+        
+        # Determine home directory based on user
+        if user == 'node':
+            home_dir = '/home/node'
+        else:
+            home_dir = '/root'
         
         # Mount Claude directory if it exists
         claude_dir = Path.home() / '.claude'
         if claude_dir.exists():
-            volumes[str(claude_dir)] = {'bind': '/root/.claude', 'mode': 'rw'}
+            volumes[str(claude_dir)] = {'bind': f'{home_dir}/.claude', 'mode': 'rw'}
         
         # Mount .claude.json file if it exists (this is where auth is stored)
         claude_json = Path.home() / '.claude.json'
         if claude_json.exists():
-            volumes[str(claude_json)] = {'bind': '/root/.claude.json', 'mode': 'rw'}
+            volumes[str(claude_json)] = {'bind': f'{home_dir}/.claude.json', 'mode': 'rw'}
         
         # Mount .config/claude directory if it exists (this is where auth is stored)
         config_claude_dir = Path.home() / '.config' / 'claude'
         if config_claude_dir.exists():
-            volumes[str(config_claude_dir)] = {'bind': '/root/.config/claude', 'mode': 'rw'}
+            volumes[str(config_claude_dir)] = {'bind': f'{home_dir}/.config/claude', 'mode': 'rw'}
         
         # Mount SSH directory if it exists (for git operations)
         ssh_dir = Path.home() / '.ssh'
         if ssh_dir.exists():
+            # SSH always goes to node user's home for git operations
             volumes[str(ssh_dir)] = {'bind': '/home/node/.ssh', 'mode': 'ro'}
         
         # Mount GitHub CLI config if it exists
         gh_config_dir = Path.home() / '.config' / 'gh'
         if gh_config_dir.exists():
-            volumes[str(gh_config_dir)] = {'bind': '/root/.config/gh', 'mode': 'ro'}
+            volumes[str(gh_config_dir)] = {'bind': f'{home_dir}/.config/gh', 'mode': 'ro'}
         
         # No need to mount npm global directory since Claude Code is installed in the container
         
@@ -265,12 +288,12 @@ class ContainerRunner:
         ]
         
         # Add environment variables
-        env = self._get_container_environment()
+        env = self._get_container_environment(user=user)
         for key, value in env.items():
             docker_cmd.extend(['-e', f'{key}={value}'])
         
         # Get volumes and check if SSH needs special handling
-        base_volumes = self._get_volumes()
+        base_volumes = self._get_volumes(user)
         volumes, ssh_needs_copying = self._prepare_ssh_handling(base_volumes, user)
         
         # Add volume mounts
@@ -320,7 +343,7 @@ class ContainerRunner:
             container.stop()
             container.remove()
     
-    def create_persistent_container(self, name_suffix: str = "task"):
+    def create_persistent_container(self, name_suffix: str = "task", user: Optional[str] = None):
         """Create a persistent container for multi-step operations.
         
         Container naming strategy:
@@ -328,6 +351,10 @@ class ContainerRunner:
         - Suffix: Random 8-character UUID hex
         
         This allows easy identification and cleanup of task containers.
+        
+        Args:
+            name_suffix: Suffix for the container type (e.g., "task")
+            user: The user that will run in the container ('node' or None/root)
         """
         # Generate a unique container name with deterministic prefix and random suffix
         random_suffix = uuid.uuid4().hex[:8]
@@ -339,7 +366,8 @@ class ContainerRunner:
             stdin_open=False,
             detach=True,
             remove=False,  # Don't auto-remove
-            name=container_name
+            name=container_name,
+            user=user
         )
         
         # Add labels for easy identification and filtering
@@ -412,16 +440,23 @@ class ContainerRunner:
         # First, ensure the workspace is owned by the target user
         if user == "node":
             chown_result = container.exec_run(['chown', '-R', 'node:node', '/workspace'])
-            if chown_result.exit_code != 0:
-                print(f"Warning: Failed to change ownership of /workspace: {chown_result.output.decode('utf-8')}")
+            # Handle both tuple format (exit_code, output) and object format
+            if isinstance(chown_result, tuple):
+                exit_code, output = chown_result
+            else:
+                exit_code = chown_result.exit_code
+                output = chown_result.output
+            if exit_code != 0:
+                print(f"Warning: Failed to change ownership of /workspace: {output.decode('utf-8')}")
         
         # If command is a string, keep it as a string for proper shell execution
         if isinstance(command, str):
             # Use su without - to preserve current directory
             command_with_user = ['su', user, '-c', command]
         else:
-            # If command is a list, join it properly for shell execution
-            shell_command = ' '.join(command)
+            # If command is a list, properly escape each argument for shell execution
+            escaped_args = [shlex.quote(str(arg)) for arg in command]
+            shell_command = ' '.join(escaped_args)
             command_with_user = ['su', user, '-c', shell_command]
         
         return container.exec_run(command_with_user, **kwargs)

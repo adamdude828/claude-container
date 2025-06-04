@@ -10,21 +10,18 @@ ARG GIT_USER_NAME
 RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
 # Create necessary directories
-RUN mkdir -p /root/.npm-global && \
-    mkdir -p /workspace && \
+RUN mkdir -p /workspace && \
     mkdir -p /root && \
     chmod 777 /root && \
     mkdir -p /home/node/.ssh && \
     chown -R node:node /home/node && \
     chmod 700 /home/node/.ssh
 
-# Set up environment variables - but stay as root
-ENV NPM_CONFIG_PREFIX=/root/.npm-global
-ENV PATH="/root/.npm-global/bin:$PATH"
-ENV HOME=/root
-
-# Install Claude Code globally as root
+# Install Claude Code globally in /usr/local so it's available to all users
 RUN npm install -g @anthropic-ai/claude-code
+
+# Set up environment variables
+ENV HOME=/root
 
 {runtime_overrides}
 
@@ -85,21 +82,18 @@ ARG GIT_USER_NAME
 RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
 # Create necessary directories
-RUN mkdir -p /root/.npm-global && \
-    mkdir -p /workspace && \
+RUN mkdir -p /workspace && \
     mkdir -p /root && \
     chmod 777 /root && \
     mkdir -p /home/node/.ssh && \
     chown -R node:node /home/node && \
     chmod 700 /home/node/.ssh
 
-# Set up environment variables - but stay as root
-ENV NPM_CONFIG_PREFIX=/root/.npm-global
-ENV PATH="/root/.npm-global/bin:$PATH"
-ENV HOME=/root
-
-# Install Claude Code globally as root
+# Install Claude Code globally in /usr/local so it's available to all users
 RUN npm install -g @anthropic-ai/claude-code
+
+# Set up environment variables
+ENV HOME=/root
 
 {runtime_overrides}
 
