@@ -64,6 +64,7 @@ class ContainerRunner:
                 
             wrapped_command = [
                 '/bin/sh', '-c',
+                'rm -rf /home/node/.ssh && '
                 'cp -r /tmp/.ssh-host /home/node/.ssh && '
                 'chown -R node:node /home/node/.ssh && '
                 'chmod 700 /home/node/.ssh && '
@@ -287,6 +288,7 @@ class ContainerRunner:
             # Create a wrapper command that copies SSH keys as root, then switches to node user
             wrapper_cmd = [
                 '/bin/sh', '-c',
+                'rm -rf /home/node/.ssh && '
                 'cp -r /tmp/.ssh-host /home/node/.ssh && '
                 'chown -R node:node /home/node/.ssh && '
                 'chmod 700 /home/node/.ssh && '
