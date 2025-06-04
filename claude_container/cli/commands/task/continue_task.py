@@ -16,6 +16,7 @@ from ....models.task import TaskStatus
 from ....utils import MCPManager
 from ...commands.auth_check import check_claude_auth
 from ...util import get_feedback_from_editor
+from claude_container.cli.helpers.claude_output_parser import parse_claude_stream_json
 
 
 def _get_exec_result(result):
@@ -310,7 +311,7 @@ Please continue working on this task based on the feedback provided."""
         click.echo("-" * 60 + "\n")
         
         # Build Claude command with optional MCP config
-        claude_cmd = ["claude", "--model=opus", "-p", full_context, CLAUDE_SKIP_PERMISSIONS_FLAG]
+        claude_cmd = ["claude", "--model=opus", "-p", full_context, "--output-format", "stream-json", "--verbose", CLAUDE_SKIP_PERMISSIONS_FLAG]
         if mcp_path:
             claude_cmd.extend(["--mcp-config", mcp_path])
         
@@ -337,23 +338,14 @@ Please continue working on this task based on the feedback provided."""
             # Real docker format - when stream=True, it returns a generator directly
             output_stream = claude_result
         
-        for chunk in output_stream:
-            # Handle different types of streaming output
-            if isinstance(chunk, bytes):
-                decoded_chunk = chunk.decode()
-            elif isinstance(chunk, int):
-                # Docker streaming sometimes yields individual bytes as integers
-                decoded_chunk = chr(chunk)
-            else:
-                decoded_chunk = str(chunk)
-            click.echo(decoded_chunk, nl=False)
-            claude_output.append(decoded_chunk)
+        # Parse the stream-json output
+        raw_output, json_messages = parse_claude_stream_json(output_stream, echo_to_screen=True)
         
-        # Save output
+        # Save output (raw JSON)
         storage_manager.save_task_log(
             task_metadata.id, 
             f"claude_output_cont_{task_metadata.continuation_count}", 
-            ''.join(claude_output)
+            ''.join(raw_output)
         )
         
         # Commit changes
@@ -394,7 +386,7 @@ Create a concise, semantic commit message that describes what was accomplished. 
             click.echo("-" * 60 + "\n")
             
             # Build Claude command with optional MCP config
-            commit_cmd = ["claude", "--model=opus", "-p", commit_prompt, CLAUDE_SKIP_PERMISSIONS_FLAG]
+            commit_cmd = ["claude", "--model=opus", "-p", commit_prompt, "--output-format", "stream-json", "--verbose", CLAUDE_SKIP_PERMISSIONS_FLAG]
             if mcp_path:
                 commit_cmd.extend(["--mcp-config", mcp_path])
             
@@ -415,23 +407,14 @@ Create a concise, semantic commit message that describes what was accomplished. 
                 # Real docker format - when stream=True, it returns a generator directly
                 output_stream = commit_result
             
-            for chunk in output_stream:
-                # Handle different types of streaming output
-                if isinstance(chunk, bytes):
-                    decoded_chunk = chunk.decode()
-                elif isinstance(chunk, int):
-                    # Docker streaming sometimes yields individual bytes as integers
-                    decoded_chunk = chr(chunk)
-                else:
-                    decoded_chunk = str(chunk)
-                click.echo(decoded_chunk, nl=False)
-                commit_output.append(decoded_chunk)
+            # Parse the stream-json output
+            raw_output, json_messages = parse_claude_stream_json(output_stream, echo_to_screen=True)
             
-            # Save commit output
+            # Save commit output (raw JSON)
             storage_manager.save_task_log(
                 task_metadata.id,
                 f"claude_commit_cont_{task_metadata.continuation_count}",
-                ''.join(commit_output)
+                ''.join(raw_output)
             )
             
             # Check if a commit was actually made

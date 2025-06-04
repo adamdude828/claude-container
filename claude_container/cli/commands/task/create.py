@@ -14,6 +14,7 @@ from claude_container.cli.helpers import (
     get_storage_and_runner,
     cleanup_container
 )
+from claude_container.cli.helpers.claude_output_parser import parse_claude_stream_json
 from ....core.constants import DEFAULT_WORKDIR, MCP_CONFIG_PATH, CLAUDE_SKIP_PERMISSIONS_FLAG, CLAUDE_PERMISSIONS_ERROR
 from ....models.task import TaskStatus
 from ....utils import MCPManager
@@ -340,7 +341,7 @@ def create(branch, description_file, mcp):
         claude_output = []
         
         # Build Claude command with optional MCP config
-        claude_cmd = ["claude", "--model=opus", "-p", task_description, CLAUDE_SKIP_PERMISSIONS_FLAG]
+        claude_cmd = ["claude", "--model=opus", "-p", task_description, "--output-format", "stream-json", "--verbose", CLAUDE_SKIP_PERMISSIONS_FLAG]
         if mcp_path:
             claude_cmd.extend(["--mcp-config", mcp_path])
         
@@ -368,20 +369,11 @@ def create(branch, description_file, mcp):
             # Real docker format - when stream=True, it returns a generator directly
             output_stream = claude_result
         
-        for chunk in output_stream:
-            # Handle different types of streaming output
-            if isinstance(chunk, bytes):
-                decoded_chunk = chunk.decode()
-            elif isinstance(chunk, int):
-                # Docker streaming sometimes yields individual bytes as integers
-                decoded_chunk = chr(chunk)
-            else:
-                decoded_chunk = str(chunk)
-            click.echo(decoded_chunk, nl=False)
-            claude_output.append(decoded_chunk)
+        # Parse the stream-json output
+        raw_output, json_messages = parse_claude_stream_json(output_stream, echo_to_screen=True)
         
-        # Save Claude output log
-        storage_manager.save_task_log(task_metadata.id, "claude_output", ''.join(claude_output))
+        # Save Claude output log (raw JSON)
+        storage_manager.save_task_log(task_metadata.id, "claude_output", ''.join(raw_output))
         
         # Step 3: Have Claude commit the changes
         click.echo("\n\n💾 Having Claude commit the changes...")
@@ -424,7 +416,7 @@ Create a concise, semantic commit message that describes what was accomplished. 
             click.echo("-" * 60 + "\n")
             
             # Build Claude command with optional MCP config
-            commit_cmd = ["claude", "--model=opus", "-p", commit_prompt, CLAUDE_SKIP_PERMISSIONS_FLAG]
+            commit_cmd = ["claude", "--model=opus", "-p", commit_prompt, "--output-format", "stream-json", "--verbose", CLAUDE_SKIP_PERMISSIONS_FLAG]
             if mcp_path:
                 commit_cmd.extend(["--mcp-config", mcp_path])
             
@@ -446,20 +438,11 @@ Create a concise, semantic commit message that describes what was accomplished. 
                 # Real docker format - when stream=True, it returns a generator directly
                 output_stream = commit_result
             
-            for chunk in output_stream:
-                # Handle different types of streaming output
-                if isinstance(chunk, bytes):
-                    decoded_chunk = chunk.decode()
-                elif isinstance(chunk, int):
-                    # Docker streaming sometimes yields individual bytes as integers
-                    decoded_chunk = chr(chunk)
-                else:
-                    decoded_chunk = str(chunk)
-                click.echo(decoded_chunk, nl=False)
-                commit_output.append(decoded_chunk)
+            # Parse the stream-json output
+            raw_output, json_messages = parse_claude_stream_json(output_stream, echo_to_screen=True)
             
-            # Save commit output
-            storage_manager.save_task_log(task_metadata.id, "claude_commit", ''.join(commit_output))
+            # Save commit output (raw JSON)
+            storage_manager.save_task_log(task_metadata.id, "claude_commit", ''.join(raw_output))
             
             # Extract commit message from the last commit
             get_commit_msg = container_runner.exec_in_container_as_user(
