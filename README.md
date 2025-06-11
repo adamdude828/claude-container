@@ -406,3 +406,18 @@ Contributions are welcome! Here's how you can contribute:
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Clerk Authentication Research
+
+Clerk is a comprehensive authentication and user management platform designed for modern web applications. It provides a complete suite of authentication methods including email/password, social logins (Google, GitHub, Facebook, etc.), and enterprise SSO solutions. The platform features a drop-in React component library with pre-built UI elements for sign-in, sign-up, and user profile management, making it extremely developer-friendly. Clerk's architecture is built on edge computing principles, ensuring low latency and high availability globally. It offers advanced security features like multi-factor authentication, session management, and JWT-based authentication out of the box. The platform excels in developer experience with excellent documentation, TypeScript support, and seamless integration with popular frameworks like Next.js, React, and Node.js. Clerk handles all the complexity of user authentication, including email verification, password resets, and OAuth flows, allowing developers to focus on building their core application features. It also provides features like organizations and teams for B2B applications, making it suitable for both consumer and enterprise use cases. The service offers generous free tiers and transparent pricing, making it accessible for startups while scaling effectively for larger applications.
+
+### MCP Tools Used in This Task
+
+This content was generated as part of testing MCP (Model Context Protocol) servers with containerized Claude code (PR #39). The following MCP tools were utilized:
+
+1. **WebFetch** - Used to retrieve PR information from GitHub (https://github.com/adamdude828/claude-container/pull/39) to extract the task description and context
+2. **Read** - Read the README.md file to understand the current structure and properly integrate the new content
+3. **Edit** - Updated this README.md file with the comprehensive Clerk authentication research and MCP tools documentation
+4. **Bash** - Initially attempted to use GitHub CLI (`gh`) to fetch PR details, though it was not available in the current environment
+
+This task demonstrates the claude-container system's ability to research topics, update documentation, and automatically create pull requests when tasks complete through the MCP protocol.
